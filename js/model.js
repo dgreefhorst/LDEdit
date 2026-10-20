@@ -53,11 +53,19 @@
     ['mdto', 'http://www.nationaalarchief.nl/mdto#']
   ];
 
-  function buildModel(parsed) {
+  function buildModel(parsed, options) {
     const { prefixes, triples } = parsed;
-    COMMON_PREFIXES.forEach(([prefix, ns]) => {
-      if (prefixes[prefix] === undefined) prefixes[prefix] = ns;
-    });
+    // Bij een bestaand bestand met eigen prefixes gebruiken we uitsluitend die
+    // prefixes — zowel voor de weergave als bij het opslaan. Alleen wanneer het
+    // bestand zelf geen enkele prefix declareert vullen we aan met de
+    // standaardprefixen, zodat er altijd iets te kiezen valt.
+    const useFilePrefixes = options && options.useFilePrefixes === true;
+    const hasFilePrefixes = Object.keys(prefixes).length > 0;
+    if (!(useFilePrefixes && hasFilePrefixes)) {
+      COMMON_PREFIXES.forEach(([prefix, ns]) => {
+        if (prefixes[prefix] === undefined) prefixes[prefix] = ns;
+      });
+    }
     const invPrefixes = {};
     Object.keys(prefixes).forEach(p => { invPrefixes[prefixes[p]] = p; });
 

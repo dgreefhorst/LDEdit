@@ -1,9 +1,14 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+// Wordt er bij het opstarten al een bestand geopend (vanuit Finder of via de
+// opdrachtregel)? Dan slaat de renderer het startscherm over.
+const startupFile = ipcRenderer.sendSync('app:startup-file');
+
 let saveHandler = null;
 let saveAsHandler = null;
 
 contextBridge.exposeInMainWorld('ttlDesktop', {
+  hasStartupFile: () => Boolean(startupFile),
   save: (text, suggestedName, forceDialog) =>
     ipcRenderer.invoke('ttl:save', { text, suggestedName, forceDialog }),
   getRecentFiles: () => ipcRenderer.invoke('ttl:recent'),
@@ -58,6 +63,7 @@ function syncWindowTitle() {
 
 window.addEventListener('DOMContentLoaded', () => {
   ipcRenderer.on('app:open-file', (_event, payload) => loadIntoApp(payload.name, payload.content));
+  ipcRenderer.on('app:show-start', () => document.dispatchEvent(new Event('ldedit-show-start')));
   ipcRenderer.on('app:new-model', () => document.getElementById('newFileBtn')?.click());
   ipcRenderer.on('app:prefixes', () => document.getElementById('prefixBtn')?.click());
   ipcRenderer.on('app:shapes', () => document.getElementById('shapesBtn')?.click());

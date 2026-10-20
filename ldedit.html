@@ -1105,7 +1105,7 @@ async function loadFile(file){
   statusEl.className = '';
   const text = await file.text();
   try{
-    model = buildModel(parseTurtle(stripBOM(text)));
+    model = buildModel(parseTurtle(stripBOM(text)), { useFilePrefixes: true });
     sessionBnodes.clear();
     selectedId = null;
     searchQuery = '';
@@ -1264,6 +1264,16 @@ function showStartScreen(){
   document.getElementById('welcomeOpenBtn').addEventListener('click', () => desktop().openDialog());
   document.getElementById('welcomeShapesBtn').addEventListener('click', () => openShapesManager(false));
   loadRecentFiles();
+}
+
+function showOpeningScreen(){
+  app.innerHTML = `
+    <div class="welcome">
+      <div class="welcome-panel">
+        <h2>LDEdit</h2>
+        <p class="welcome-sub">Bestand openen…</p>
+      </div>
+    </div>`;
 }
 
 function loadRecentFiles(){
@@ -3014,6 +3024,9 @@ document.getElementById('createModalBody').addEventListener('keydown', e => {
 });
 document.getElementById('emptyStateNewModelBtn').addEventListener('click', (e) => { e.preventDefault(); startNewModel(); });
 
+// Val terug op het startscherm wanneer het bestand bij het starten niet geopend kon worden.
+document.addEventListener('ldedit-show-start', () => { if(!model) showStartScreen(); });
+
 // Bundels: modal-bediening
 document.getElementById('shapesBtn').addEventListener('click', openShapesManager);
 document.getElementById('shapesCancelBtn').addEventListener('click', closeShapesManager);
@@ -3024,9 +3037,12 @@ document.getElementById('shapesOverlay').addEventListener('click', e => {
 (async function boot(){
   if(desktop()){
     desktop().registerSaveHandlers(() => saveTurtle(false), () => saveTurtle(true));
+    const startupFile = desktop().hasStartupFile ? desktop().hasStartupFile() : false;
+    if(startupFile) showOpeningScreen();
     try { defaultPrefixName = (await desktop().getDefaultPrefix()) || ''; } catch(err) { defaultPrefixName = ''; }
     await initShapes();
-    showStartScreen();
+    // Niet het startscherm tonen als er al een bestand is geopend of wordt geopend.
+    if(!model && !startupFile) showStartScreen();
   } else {
     showStartScreen();
   }

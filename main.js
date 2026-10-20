@@ -16,6 +16,7 @@ const MAX_RECENT = 10;
 const BUNDLED_SHAPES_DIR = path.join(__dirname, 'shapes');
 
 let mainWindow = null;
+let windowReady = false;
 let pendingOpenPath = null;
 let currentFilePath = null;
 let isDirty = false;
@@ -238,6 +239,10 @@ async function writeDocument({ text, suggestedName, forceDialog }) {
 
 ipcMain.handle('ttl:save', (_event, payload) => writeDocument(payload));
 ipcMain.handle('ttl:recent', () => listRecent());
+// Synchrone vraag van de renderer bij het opstarten: wordt er al een bestand
+// geopend (vanuit Finder of via de opdrachtregel)? Zo niet, dan tonen we het
+// startscherm met recente bestanden.
+ipcMain.on('app:startup-file', (event) => { event.returnValue = pendingOpenPath || null; });
 ipcMain.handle('ttl:open-path', (_event, filePath) => openFileInWindow(filePath));
 ipcMain.handle('ttl:open-dialog', () => pickAndOpen());
 ipcMain.on('ttl:document', (_event, filePath) => setCurrentFile(filePath));
@@ -255,6 +260,7 @@ function fileFromArgv(argv) {
 }
 
 function createWindow() {
+  windowReady = false;
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -279,12 +285,13 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  mainWindow.webContents.once('did-finish-load', () => {
-    if (pendingOpenPath) {
-      const target = pendingOpenPath;
-      pendingOpenPath = null;
-      openFileInWindow(target);
-    }
+  mainWindow.webContents.once('did-finish-load', async () => {
+    windowReady = true;
+    if (!pendingOpenPath) return;
+    const target = pendingOpenPath;
+    pendingOpenPath = null;
+    const opened = await openFileInWindow(target);
+    if (!opened) mainWindow?.webContents.send('app:show-start');
   });
 
   mainWindow.on('close', (event) => {
@@ -310,6 +317,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    windowReady = false;
     if (quitRequested) app.quit();
   });
 }
@@ -328,7 +336,7 @@ function confirmDiscardChanges() {
 }
 
 async function openFileInWindow(filePath) {
-  if (!confirmDiscardChanges()) return;
+  if (!confirmDiscardChanges()) return false;
   try {
     const content = await fs.readFile(filePath, 'utf8');
     setCurrentFile(filePath);
@@ -341,11 +349,13 @@ async function openFileInWindow(filePath) {
     } else {
       pendingOpenPath = filePath;
     }
+    return true;
   } catch (err) {
     dialog.showErrorBox(
       'Kon bestand niet openen',
       `${path.basename(filePath)}\n\n${err.message}`
     );
+    return false;
   }
 }
 
@@ -463,7 +473,7 @@ app.on('before-quit', () => { quitRequested = true; });
 
 app.on('open-file', (event, filePath) => {
   event.preventDefault();
-  if (app.isReady() && mainWindow) openFileInWindow(filePath);
+  if (app.isReady() && mainWindow && windowReady) openFileInWindow(filePath);
   else pendingOpenPath = filePath;
 });
 
@@ -475,9 +485,9 @@ app.whenReady().then(async () => {
   });
 
   await buildMenu();
-  createWindow();
   const fromArgv = fileFromArgv(process.argv);
   if (fromArgv) pendingOpenPath = path.resolve(fromArgv);
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

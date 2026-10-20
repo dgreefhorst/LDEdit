@@ -52,6 +52,28 @@ function componentsFor(report, nodeValue) {
   });
 })();
 
+/* ---------------- 1b. Prefixen: bestand bepaalt de prefixen ---------------- */
+
+(function testFilePrefixes() {
+  const withPrefixes = M.buildModel(
+    T.parse('@prefix ex: <http://ex/> .\n@prefix foaf: <http://xmlns.com/foaf/0.1/> .\n ex:a foaf:name "x" .\n'),
+    { useFilePrefixes: true }
+  );
+  eq('prefixen: alleen prefixes uit het bestand', Object.keys(withPrefixes.prefixes).sort().join(','), 'ex,foaf');
+  eq('prefixen: geen standaardprefix toegevoegd', withPrefixes.prefixes['rdf'], undefined);
+  eq('prefixen: curie met eigen prefix', withPrefixes.curie('http://ex/a'), 'ex:a');
+  eq('prefixen: onbekende namespace blijft volledige IRI',
+    withPrefixes.curie('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+    'http://www.w3.org/1999/02/22-rdf-syntax-ns#type');
+
+  const defaults = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:a ex:b ex:c .\n'));
+  check('prefixen: standaard wordt aangevuld zonder optie',
+    defaults.prefixes['rdf'] === 'http://www.w3.org/1999/02/22-rdf-syntax-ns#' && defaults.prefixes['ex'] === 'http://ex/');
+
+  const noPrefixes = M.buildModel(T.parse('<http://ex/a> <http://ex/b> <http://ex/c> .\n'), { useFilePrefixes: true });
+  check('prefixen: bestand zonder prefixes krijgt standaardprefixen', noPrefixes.prefixes['rdf'] !== undefined);
+})();
+
 /* ---------------- 2. Shapes bouwen uit de meegeleverde bestanden ---------------- */
 
 (function testBundledShapes() {
