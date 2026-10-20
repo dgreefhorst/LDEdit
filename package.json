@@ -1,0 +1,43 @@
+{
+  "name": "ldedit",
+  "productName": "LDEdit",
+  "version": "1.0.0",
+  "description": "Native macOS-app om linked-data-resources te bekijken, te bewerken en te valideren tegen SHACL-shapes.",
+  "author": {
+    "name": "Danny Greefhorst",
+    "email": "danny.greefhorst@gmail.com"
+  },
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac",
+    "test": "node test/run-tests.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "nl.ldedit.app",
+    "productName": "LDEdit",
+    "afterSign": "scripts/adhoc-sign.js",
+    "files": [
+      "main.js",
+      "preload.js",
+      "ldedit.html",
+      "js/**/*",
+      "shapes/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns"
+    }
+  }
+}

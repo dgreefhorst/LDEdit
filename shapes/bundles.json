@@ -1,0 +1,55 @@
+[
+  {
+    "id": "mim",
+    "name": "MIM",
+    "description": "Shapes + MIM-ontologie.",
+    "files": ["mim-shapes.ttl", "mim_ontologie.ttl"]
+  },
+  {
+    "id": "nl-sbb",
+    "name": "NL-SBB",
+    "description": "SKOS-AP-NL + SKOS, DCMI en FOAF.",
+    "files": ["skos-ap-nl.ttl", "skos.ttl", "dcterms.ttl", "foaf.ttl"]
+  },
+  {
+    "id": "dcat",
+    "name": "DCAT-AP-NL",
+    "description": "DCAT-shapes + DCAT, DCMI, SKOS, FOAF, ADMS en vCard.",
+    "files": [
+      "dcat-ap-nl-SHACL.ttl",
+      "dcat-ap-nl-SHACL-klassebereik.ttl",
+      "dcat-ap-nl-SHACL-klassebereik-codelijsten.ttl",
+      "dcat-ap-nl-SHACL-aanbevolen.ttl",
+      "dcat.ttl",
+      "dcterms.ttl",
+      "skos.ttl",
+      "foaf.ttl",
+      "adms.ttl",
+      "vcard.ttl"
+    ]
+  },
+  {
+    "id": "fds-dqv",
+    "name": "FDS-DQV",
+    "description": "DQV-shapes + DQV, PROV-O, DCAT, DCMI en SKOS.",
+    "files": ["dqv_shacl.ttl", "dqv.ttl", "prov-o.ttl", "dcat.ttl", "dcterms.ttl", "skos.ttl"]
+  },
+  {
+    "id": "mdto",
+    "name": "MDTO",
+    "description": "Shapes + MDTO-ontologie.",
+    "files": ["mdto-rdf-1.0-shacl.ttl", "mdto-rdf-1.0.ttl"]
+  },
+  {
+    "id": "type-ontologie",
+    "name": "Ontologie",
+    "description": "RDF, RDFS en OWL.",
+    "files": ["rdf.ttl", "rdfs.ttl", "owl.ttl"]
+  },
+  {
+    "id": "shacl",
+    "name": "SHACL",
+    "description": "Vocabulaire voor SHACL-shapes.",
+    "files": ["shacl.ttl"]
+  }
+]

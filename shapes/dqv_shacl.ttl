@@ -1,0 +1,386 @@
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix dqv:     <http://www.w3.org/ns/dqv#> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix nora:    <http://www.noraonline.nl/wiki/> .
+@prefix fds-dqv: <https://federatief.datastelsel.nl/kennisbank/dqv/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix oa:      <http://www.w3.org/ns/oa#> .
+@prefix qudt:    <http://qudt.org/schema/qudt/> .
+@prefix unit:    <http://qudt.org/vocab/unit/> .
+@prefix void:    <http://rdfs.org/ns/void#> .
+@prefix schema:  <https://schema.org/> .
+
+# ============================================================
+# SHACL Schema — Gegevenskwaliteitsregistratie (FDS-DQV)
+#
+# Dit schema valideert de RDF-representatie (DQV/Turtle) die door
+# de Gegevenskwaliteitsregistratie-applicatie wordt geëxporteerd.
+#
+# Het modelleert drie centrale objecttypen uit het logische
+# gegevensmodel (zie gegevensmodel.html):
+#   - dqv:QualityMeasurementDataset  (Dataset / kwaliteitsmetingendataset)
+#   - dqv:QualityMeasurement        (Kwaliteitsmeting)
+#   - prov:Plan                     (Kwaliteitsregel)
+#
+# Daarnaast zijn er hulp-shapes voor:
+#   - void:classPartition blank nodes (Objecttype-statistiek)
+#   - oa:Annotation blank nodes     (DimensieToelichting)
+# ============================================================
+
+
+# ============================================================
+# 1. QualityMeasurementDataset
+# ============================================================
+
+fds-dqv:shape-QualityMeasurementDataset
+    a sh:NodeShape ;
+    sh:targetClass dqv:QualityMeasurementDataset ;
+    sh:name "Kwaliteitsmetingendataset"@nl ;
+    sh:description "Valideert een instantie van dqv:QualityMeasurementDataset zoals geëxporteerd door de Gegevenskwaliteitsregistratie."@nl ;
+    # Exporteert: dcterms:title (verplicht)
+    sh:property [
+        sh:path dcterms:title ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Een kwaliteitsmetingendataset moet precies één dcterms:title (naam) hebben."@nl ;
+    ] ;
+    # Exporteert: dcterms:description (toelichting) — optioneel
+    sh:property [
+        sh:path dcterms:description ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:message "dcterms:description is optioneel maar mag maximaal één keer voorkomen."@nl ;
+    ] ;
+    # Exporteert: dcterms:temporal als xsd:gYear (meetjaar) — optioneel
+    sh:property [
+        sh:path dcterms:temporal ;
+        sh:nodeKind sh:Literal ;
+        sh:datatype xsd:gYear ;
+        sh:pattern "^\\d{4}$" ;
+        sh:maxCount 1 ;
+        sh:message "dcterms:temporal moet een 4-cijferig jaartal zijn (xsd:gYear)."@nl ;
+    ] ;
+    # Exporteert: dcat:servesDataset (URI van originele dataset / DCAT record)
+    sh:property [
+        sh:path dcat:servesDataset ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:message "dcat:servesDataset moet, indien aanwezig, een IRI zijn."@nl ;
+    ] ;
+    # Exporteert: void:classPartition (Objecttype-statistieken, 0..*)
+    sh:property [
+        sh:path void:classPartition ;
+        sh:node fds-dqv:shape-ClassPartition ;
+        sh:message "void:classPartition moet een blank node zijn die voldoet aan fds-dqv:shape-ClassPartition."@nl ;
+    ] ;
+    # Statistieken: optionele integers + toelichtingen
+    sh:property [
+        sh:path fds-dqv:aantalGebeurtenissen ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+        sh:message "fds-dqv:aantalGebeurtenissen moet, indien aanwezig, een xsd:integer zijn."@nl ;
+    ] ;
+    sh:property [
+        sh:path fds-dqv:gebeurtenissenToelichting ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path fds-dqv:aantalWijzigingen ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path fds-dqv:wijzigingenToelichting ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path fds-dqv:aantalTerugmeldingen ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path fds-dqv:terugmeldingenToelichting ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    # Dimensietoelichtingen via dqv:QualityAnnotation (oa:Annotation) — 0..*
+    sh:property [
+        sh:path dqv:QualityAnnotation ;
+        sh:node fds-dqv:shape-DimensionAnnotation ;
+        sh:message "dqv:QualityAnnotation moet een oa:Annotation blank node zijn (zie shape-DimensionAnnotation)."@nl ;
+    ] ;
+    # Koppeling naar kwaliteitsregels (prov:Plan) — 0..*
+    sh:property [
+        sh:path prov:hadPlan ;
+        sh:node fds-dqv:shape-QualityRule ;
+        sh:message "prov:hadPlan moet verwijzen naar een prov:Plan (shape-QualityRule)."@nl ;
+    ] ;
+    # Koppeling naar metingen — 0..*, minstens één vereist voor geldige export
+    sh:property [
+        sh:path dqv:hasQualityMeasurement ;
+        sh:node fds-dqv:shape-QualityMeasurement ;
+        sh:message "dqv:hasQualityMeasurement moet verwijzen naar een dqv:QualityMeasurement (shape-QualityMeasurement)."@nl ;
+    ] .
+
+
+# ============================================================
+# 2. void:classPartition (Objecttype-statistiek)
+#    Wordt door de export als blank node geschreven met:
+#      [ dcterms:subject "Verblijfsobject" ; void:entities 7500000 ]
+# ============================================================
+
+fds-dqv:shape-ClassPartition
+    a sh:NodeShape ;
+    sh:name "Objecttype-partitie"@nl ;
+    sh:description "Statistische verdeling van een objecttype binnen de gemeten dataset (void:classPartition)."@nl ;
+    sh:property [
+        sh:path dcterms:subject ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Een objecttype-partitie moet precies één dcterms:subject (naam) hebben."@nl ;
+    ] ;
+    sh:property [
+        sh:path void:entities ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "void:entities (aantal objecten) is verplicht en moet een xsd:integer zijn."@nl ;
+    ] .
+
+
+# ============================================================
+# 3. dqv:QualityAnnotation / oa:Annotation (DimensieToelichting)
+#    Wordt door de export als blank node geschreven met:
+#      [ a oa:Annotation ; dqv:inDimension <dim> ; oa:bodyValue "..." ]
+# ============================================================
+
+fds-dqv:shape-DimensionAnnotation
+    a sh:NodeShape ;
+    sh:name "Dimensietoelichting"@nl ;
+    sh:description "Toelichting bij de wijze waarop een dataset invulling geeft aan een kwaliteitsdimensie (oa:Annotation binnen dqv:QualityAnnotation)."@nl ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue oa:Annotation ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Een dimensietoelichting moet expliciet als oa:Annotation getypeerd zijn."@nl ;
+    ] ;
+    sh:property [
+        sh:path dqv:inDimension ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "dqv:inDimension is verplicht en moet een IRI (kwaliteitsdimensie) zijn."@nl ;
+    ] ;
+    sh:property [
+        sh:path oa:bodyValue ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "oa:bodyValue (de toelichting) is verplicht."@nl ;
+    ] .
+
+
+# ============================================================
+# 4. dqv:QualityMeasurement (Kwaliteitsmeting)
+# ============================================================
+
+fds-dqv:shape-QualityMeasurement
+    a sh:NodeShape ;
+    sh:targetClass dqv:QualityMeasurement ;
+    sh:name "Kwaliteitsmeting"@nl ;
+    sh:description "Valideert een dqv:QualityMeasurement zoals geëxporteerd door de applicatie."@nl ;
+    # Kwaliteitsdimensie (attribuut of dimensie-URI) — verplicht
+    sh:property [
+        sh:path dqv:inDimension ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Een kwaliteitsmeting moet precies één dqv:inDimension (kwaliteitsdimensie) hebben."@nl ;
+    ] ;
+    # Kwaliteitsmetriek — verplicht
+    sh:property [
+        sh:path dqv:isMeasurementOf ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "dqv:isMeasurementOf (kwaliteitsmetriek) is verplicht."@nl ;
+    ] ;
+    # DCAT-record van de gemeten dataset — optioneel
+    sh:property [
+        sh:path dqv:computedOn ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:message "dqv:computedOn moet, indien aanwezig, een IRI zijn (DCAT record van de gemeten dataset)."@nl ;
+    ] ;
+    # Meetwaarde — optioneel, xsd:double of xsd:string afhankelijk van metriek
+    sh:property [
+        sh:path dqv:value ;
+        sh:nodeKind sh:Literal ;
+        sh:or (
+            [ sh:datatype xsd:double ]
+            [ sh:datatype xsd:string ]
+        ) ;
+        sh:maxCount 1 ;
+        sh:message "dqv:value (meetwaarde) is optioneel; maximaal één toegestaan."@nl ;
+    ] ;
+    # qudt:unit — bij PERCENTAGE wordt unit:PERCENT gezet (IRI); bij EENHEID als string
+    sh:property [
+        sh:path qudt:unit ;
+        sh:or (
+            [ sh:datatype xsd:string ]
+            [ sh:nodeKind sh:IRI ]
+        ) ;
+        sh:maxCount 1 ;
+    ] ;
+    # rdfs:comment (ingevuld zinsjabloon) — verplicht, aanwezig in elke export
+    sh:property [
+        sh:path rdfs:comment ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Een kwaliteitsmeting moet precies één rdfs:comment (ingevuld zinsjabloon) hebben."@nl ;
+    ] ;
+    # nora:normwaardeVariabele — optioneel
+    sh:property [
+        sh:path nora:normwaardeVariabele ;
+        sh:or (
+            [ sh:datatype xsd:integer ]
+            [ sh:datatype xsd:string ]
+        ) ;
+        sh:maxCount 1 ;
+        sh:message "nora:normwaardeVariabele moet, indien aanwezig, een integer of string zijn."@nl ;
+    ] ;
+    # Toelichting — optioneel
+    sh:property [
+        sh:path dcterms:description ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    # Variabelen uit het zinsjabloon
+    sh:property [
+        sh:path nora:aantalVariabele ;
+        sh:datatype xsd:double ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path nora:steekproefVariabele ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path nora:populatieVariabele ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path nora:detailniveauVariabele ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path nora:bewijsVariabele ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path dcterms:subject ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:message "dcterms:subject wordt gebruikt voor ATTRIBUUT- en OBJECTTYPE-variabelen."@nl ;
+    ] ;
+    sh:property [
+        sh:path dcterms:temporal ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:message "dcterms:temporal wordt gebruikt voor PERIODE/NORMTIJD-variabelen."@nl ;
+    ] ;
+    sh:property [
+        sh:path prov:used ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:message "prov:used wordt gebruikt voor de BRON-variabele."@nl ;
+    ] ;
+    # Verwijzing naar een kwaliteitsregel (prov:Plan) — 0..1
+    sh:property [
+        sh:path prov:hadPlan ;
+        sh:nodeKind sh:IRI ;
+        sh:node fds-dqv:shape-QualityRule ;
+        sh:maxCount 1 ;
+        sh:message "prov:hadPlan moet, indien aanwezig, verwijzen naar een prov:Plan (shape-QualityRule)."@nl ;
+    ] .
+
+
+# ============================================================
+# 5. prov:Plan (Kwaliteitsregel)
+# ============================================================
+
+fds-dqv:shape-QualityRule
+    a sh:NodeShape ;
+    sh:targetClass prov:Plan ;
+    sh:name "Kwaliteitsregel"@nl ;
+    sh:description "Valideert een kwaliteitsregel (prov:Plan) zoals geëxporteerd door de applicatie."@nl ;
+    # Naam — verplicht
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Een kwaliteitsregel moet precies één rdfs:label (naam) hebben."@nl ;
+    ] ;
+    # Omschrijving — optioneel (één regel)
+    sh:property [
+        sh:path rdfs:comment ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    # Melding — optioneel (één regel)
+    sh:property [
+        sh:path sh:message ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    # Ernst — optioneel (sh:Violation of sh:Warning)
+    sh:property [
+        sh:path sh:severity ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:in ( sh:Violation sh:Warning ) ;
+    ] ;
+    # Objecttype waarop de regel van toepassing is — optioneel (xsd:string)
+    sh:property [
+        sh:path dqv:computedOn ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "dqv:computedOn mag maximaal één keer voorkomen en moet een literal zijn."@nl ;
+    ] ;
+    # Metriek waar de regel betrekking op heeft — optioneel
+    sh:property [
+        sh:path dqv:isMeasurementOf ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+    ] ;
+    # Specificatie — 
+    sh:property [
+        sh:path dcterms:description ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    # Taal — optioneel (SQL, SHACL, SPARQL, etc.)
+    sh:property [
+        sh:path dcterms:type ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:message "dcterms:type (taal) is optioneel; bij Kwaliteitsregeltaal wordt dit niet geëxporteerd."@nl ;
+    ] .

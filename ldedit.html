@@ -1,0 +1,3038 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LDEdit</title>
+<script>
+  if (navigator.userAgent.indexOf('Electron') !== -1) {
+    document.documentElement.classList.add('is-electron');
+  }
+</script>
+<style>
+  :root{
+    --bg:#f4f5f7;
+    --panel:#ffffff;
+    --ink:#151a23;
+    --ink-soft:#68707c;
+    --line:#dde1e6;
+    --accent:#233246;
+    --accent-soft:#eaedf2;
+    --amber:#8a5a1c;
+    --error:#a3392f;
+    --warn:#8a5a1c;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, Menlo, monospace;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:var(--sans);
+    background:var(--bg);
+    color:var(--ink);
+    display:flex;
+    flex-direction:column;
+  }
+
+  header{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    padding:14px 20px;
+    background:var(--panel);
+    border-bottom:1px solid var(--line);
+    flex-shrink:0;
+    flex-wrap:wrap;
+  }
+  header h1{
+    font-size:17px;
+    font-weight:600;
+    margin:0;
+    letter-spacing:.01em;
+    white-space:nowrap;
+  }
+  header h1 span{color:var(--accent);}
+  .file-controls{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex:1;
+    min-width:260px;
+  }
+  .btn{
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--ink);
+    padding:7px 14px;
+    border-radius:3px;
+    font-size:13px;
+    font-family:var(--sans);
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn.primary{
+    background:var(--accent);
+    color:#fff;
+    border-color:var(--accent);
+  }
+  .btn.primary:hover{background:#264c49;}
+  #fileInput{
+    position:absolute;
+    width:1px;height:1px;
+    padding:0;margin:-1px;
+    overflow:hidden;
+    clip:rect(0,0,0,0);
+    white-space:nowrap;
+    border:0;
+  }
+  #fileName{
+    font-size:12.5px;
+    color:var(--ink-soft);
+    font-family:var(--mono);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    max-width:280px;
+  }
+  #status{
+    font-size:12.5px;
+    color:var(--accent);
+    white-space:nowrap;
+  }
+  #status.error{color:var(--error);}
+
+  .app{
+    flex:1;
+    display:flex;
+    min-height:0;
+  }
+  .empty-state{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:14px;
+    color:var(--ink-soft);
+    text-align:center;
+    padding:40px;
+  }
+  .empty-state .icon{
+    width:56px;height:56px;
+    border:1.5px solid var(--line);
+    border-radius:3px;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--accent);
+  }
+  .empty-state p{max-width:380px;font-size:14px;line-height:1.6;margin:0;}
+  .empty-state-or{font-size:12px;color:var(--ink-soft);margin:14px 0 !important;}
+  .new-model-form{text-align:left;max-width:360px;width:100%;}
+  .new-model-form .add-prop-row input[type="text"]{width:100%;}
+  .empty-state .drop-target{
+    border:1.5px dashed var(--line);
+    border-radius:3px;
+    padding:28px 40px;
+    transition:border-color .15s, background .15s;
+  }
+  .empty-state .drop-target.dragover{border-color:var(--accent);background:var(--accent-soft);}
+
+  .sidebar{
+    width:340px;
+    flex-shrink:0;
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .filters{padding:10px 12px;border-bottom:1px solid var(--line);}
+  .filters label{
+    display:block;
+    font-size:11px;
+    font-weight:600;
+    color:var(--ink-soft);
+    margin-bottom:5px;
+  }
+  .filters select{
+    width:100%;
+    padding:7px 10px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    font-size:13px;
+    font-family:var(--sans);
+    background:var(--bg);
+    color:var(--ink);
+  }
+  .filters select:focus{outline:none;border-color:var(--accent);}
+
+  .search-box{padding:10px 12px;border-bottom:1px solid var(--line);}
+  .search-box input{
+    width:100%;
+    padding:7px 10px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    font-size:13px;
+    font-family:var(--sans);
+    background:var(--bg);
+  }
+  .search-box input:focus{outline:none;border-color:var(--accent);}
+
+  .list{flex:1;overflow-y:auto;padding:6px;}
+  .list-item{
+    padding:9px 10px 9px 9px;
+    border-radius:2px;
+    border-left:2px solid transparent;
+    cursor:pointer;
+    margin-bottom:1px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .list-item:hover{background:var(--bg);}
+  .list-item.selected{background:var(--accent-soft);border-left-color:var(--accent);}
+  .list-item .label{
+    font-size:13.5px;
+    color:var(--ink);
+    font-weight:500;
+    display:block;
+    flex:1;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .list-item.selected .label{color:var(--accent);}
+  .list-item .sub{
+    font-size:11.5px;
+    color:var(--ink-soft);
+    font-family:var(--mono);
+    display:block;
+    margin-top:1px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .list-empty{padding:24px 14px;color:var(--ink-soft);font-size:13px;text-align:center;}
+  .list-badge{
+    flex-shrink:0;
+    font-size:10.5px;
+    font-weight:600;
+    padding:1px 6px;
+    border-radius:9px;
+    border:1px solid transparent;
+  }
+  .list-badge.violation{color:#fff;background:var(--error);}
+  .list-badge.warning{color:#fff;background:var(--warn);}
+
+  .detail{flex:1;overflow-y:auto;padding:32px 44px;min-width:0;}
+  .detail-empty{color:var(--ink-soft);font-size:14px;padding-top:60px;text-align:center;}
+  .detail-kind{
+    display:inline-block;
+    font-size:11px;
+    font-weight:600;
+    color:var(--accent);
+    background:var(--accent-soft);
+    padding:3px 9px;
+    border-radius:2px;
+    margin-bottom:12px;
+  }
+  .detail h2{
+    font-size:23px;
+    margin:0 0 6px;
+    font-weight:600;
+    line-height:1.3;
+    word-break:break-word;
+  }
+  .detail h2.resource-title{font-weight:700;}
+  .detail .uri{
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--ink-soft);
+    word-break:break-all;
+    margin-bottom:22px;
+  }
+  .detail-description{
+    font-size:13.5px;
+    line-height:1.6;
+    color:var(--ink);
+    max-width:70ch;
+    margin:-10px 0 20px;
+    white-space:pre-wrap;
+  }
+  .detail-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;}
+  .detail-heading h2{margin-bottom:0;}
+  .detail-label-pred{
+    font-size:11px;
+    font-weight:600;
+    color:var(--accent);
+    background:var(--accent-soft);
+    padding:2px 7px;
+    border-radius:2px;
+    white-space:nowrap;
+  }
+
+  .section-title{font-size:13px;font-weight:600;color:var(--ink);margin:30px 0 4px;}
+
+  .prop-table{border-top:1px solid var(--line);}
+  .prop-row{
+    display:flex;
+    gap:24px;
+    padding:14px 0;
+    border-bottom:1px solid var(--line);
+    align-items:flex-start;
+  }
+  .prop-row.invalid{background:#fdf4f3;box-shadow:inset 3px 0 0 var(--error);padding-left:10px;margin-left:-10px;}
+  .prop-row .pname{
+    width:200px;
+    flex-shrink:0;
+    font-size:13px;
+    font-weight:500;
+    color:var(--ink);
+    padding-top:1px;
+  }
+  .prop-row .pname .puri{
+    display:block;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    font-weight:400;
+    margin-top:2px;
+    word-break:break-all;
+  }
+  .prop-row .pvals{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;}
+  .pval{font-size:13.5px;line-height:1.5;word-break:break-word;}
+  .pval .lang-tag{font-size:10.5px;color:var(--amber);font-family:var(--mono);margin-left:4px;}
+  .pval .lang-tag.lang-blocked{color:var(--error);border-bottom:1px dotted currentColor;cursor:help;}
+  .lang-edit{
+    font-size:10.5px;
+    font-family:var(--mono);
+    color:var(--amber);
+    border:1px solid var(--line);
+    border-radius:2px;
+    background:var(--panel);
+    padding:1px 2px;
+    cursor:pointer;
+  }
+  .lang-edit:hover{border-color:var(--accent);}
+  .lang-edit:focus{outline:none;border-color:var(--accent);}
+  .pval-link{
+    color:var(--accent);
+    cursor:pointer;
+    text-decoration:none;
+    border-bottom:1px solid transparent;
+    font-size:13px;
+  }
+  .pval-link:hover{border-bottom-color:var(--accent);}
+  .pval-link .pv-uri{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);}
+
+  .pval-editable, .editable-title{
+    cursor:text;
+    border-radius:2px;
+    padding:2px 5px;
+    margin:-2px -5px;
+    outline:none;
+    transition:background .12s, box-shadow .12s;
+  }
+  .pval-editable:hover, .editable-title:hover{background:var(--accent-soft);}
+  .pval-editable:focus, .editable-title:focus{background:#ffffff;box-shadow:0 0 0 1.5px var(--accent);}
+  .pval-wrap{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;}
+  .pval-wrap.invalid{background:#fbe9e7;border-radius:2px;padding:2px 6px;margin:-2px -6px;}
+  .rel-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .rel-wrap.invalid{background:#fbe9e7;border-radius:2px;padding:2px 6px;margin:-2px -6px;}
+
+  .edit-hint{font-size:12px;color:var(--ink-soft);margin:-14px 0 22px;}
+
+  .rel-edit-btn{
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--ink-soft);
+    font-size:11px;
+    line-height:1;
+    padding:4px 6px;
+    border-radius:2px;
+    cursor:pointer;
+    font-family:var(--sans);
+  }
+  .rel-edit-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .rel-picker{width:100%;max-width:420px;border:1px solid var(--accent);border-radius:3px;padding:8px;background:#fff;}
+  .rel-picker-input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:3px;font-size:13px;font-family:var(--sans);}
+  .rel-picker-input:focus{outline:none;border-color:var(--accent);}
+  .rel-picker-input.invalid{border-color:var(--error);}
+  .rel-picker-list{max-height:220px;overflow-y:auto;margin-top:6px;}
+  .rel-option{padding:6px 8px;border-radius:2px;cursor:pointer;display:flex;flex-direction:column;}
+  .rel-option:hover{background:var(--accent-soft);}
+  .rel-option .label{font-size:13px;color:var(--ink);}
+  .rel-option .sub{font-size:11px;color:var(--ink-soft);font-family:var(--mono);}
+  .rel-option-empty{padding:8px 4px;font-size:12px;color:var(--ink-soft);}
+  .rel-picker-cancel{
+    margin-top:6px;border:none;background:none;color:var(--ink-soft);
+    font-size:12px;cursor:pointer;padding:2px 4px;font-family:var(--sans);
+  }
+  .rel-picker-cancel:hover{color:var(--accent);}
+
+  .val-delete-btn{
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--ink-soft);
+    font-size:13px;
+    line-height:1;
+    padding:4px 7px;
+    border-radius:2px;
+    cursor:pointer;
+    font-family:var(--sans);
+  }
+  .val-delete-btn:hover{border-color:var(--error);color:var(--error);}
+  .add-prop-btn{margin-top:16px;}
+  .add-prop-form{border:1px solid var(--accent);border-radius:3px;padding:14px;margin-top:16px;max-width:520px;}
+  .add-prop-row{margin-bottom:12px;}
+  .add-prop-row:last-of-type{margin-bottom:0;}
+  .add-prop-label{font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .add-prop-row input[type="text"]{
+    width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:3px;
+    font-size:13px;font-family:var(--sans);
+  }
+  .add-prop-row input[type="text"]:focus{outline:none;border-color:var(--accent);}
+  .add-prop-kind-row{display:flex;gap:18px;font-size:13px;color:var(--ink);}
+  .add-prop-kind-row label{display:flex;align-items:center;gap:5px;cursor:pointer;}
+  .add-prop-value-area input[type="text"]{margin-bottom:6px;}
+  .add-prop-value-area input[type="text"]:last-child{margin-bottom:0;}
+  .add-prop-value-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+  .add-prop-value-row input[type="text"]{margin-bottom:0;}
+  .add-prop-value-row input.add-prop-literal-input{flex:1 1 0;min-width:0;width:auto;}
+  .add-prop-value-row input.add-prop-lang-input{flex:0 0 120px;width:120px;min-width:0;}
+  .add-prop-value-area select{
+    width:100%;
+    padding:6px 8px;
+    margin-bottom:6px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    font-size:13px;
+    font-family:var(--sans);
+    background:var(--bg);
+    color:var(--ink);
+  }
+  .add-prop-value-area select:focus{outline:none;border-color:var(--accent);}
+  .add-prop-error{font-size:12px;color:var(--error);min-height:14px;margin-bottom:8px;}
+  .add-prop-actions{display:flex;gap:10px;align-items:center;}
+
+  .suggest-block{margin-bottom:12px;}
+  .suggest-label{font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
+  .suggest-row{display:flex;flex-wrap:wrap;gap:6px;}
+  .suggest-chip{
+    border:1px solid var(--accent);
+    background:var(--accent-soft);
+    color:var(--accent);
+    font-size:12px;
+    padding:4px 9px;
+    border-radius:12px;
+    cursor:pointer;
+    font-family:var(--sans);
+  }
+  .suggest-chip:hover{background:var(--accent);color:#fff;}
+  .suggest-chip .req{font-size:10px;font-weight:600;opacity:.8;margin-left:4px;}
+
+  .validation-summary{
+    border:1px solid var(--line);
+    border-left:3px solid var(--line);
+    border-radius:3px;
+    padding:10px 14px;
+    margin-bottom:18px;
+    font-size:13px;
+    background:var(--panel);
+  }
+  .validation-summary.ok{border-left-color:#2f7d4f;}
+  .validation-summary.problems{border-left-color:var(--error);}
+  .validation-summary .vs-title{font-weight:600;}
+  .validation-summary .vs-counts{color:var(--ink-soft);font-size:12px;margin-top:2px;}
+
+  .vmsg{font-size:12px;line-height:1.45;color:var(--error);}
+  .vmsg.warning{color:var(--warn);}
+  .vmsg.info{color:var(--ink-soft);font-style:italic;}
+  .vwhy{display:block;margin-top:2px;font-size:11.5px;color:var(--ink-soft);}
+
+  .bundle-row{display:flex;gap:6px;align-items:center;}
+  .bundle-row select{flex:1 1 auto;min-width:0;width:auto;}
+  .bundle-row .btn{flex:0 0 auto;padding:7px 10px;font-size:12.5px;white-space:nowrap;}
+  .create-bnode-toggle{display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;font-weight:600;color:var(--ink-soft);}
+  .create-modal{max-width:520px;}
+  .create-modal select{
+    width:100%;
+    padding:6px 8px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    font-size:13px;
+    font-family:var(--sans);
+    background:var(--bg);
+    color:var(--ink);
+  }
+  .create-modal select:focus{outline:none;border-color:var(--accent);}
+  .create-modal .label-row{display:flex;gap:6px;align-items:center;}
+  .create-modal .label-row input[type="text"]{flex:1 1 0;min-width:0;width:auto;}
+  .create-modal .label-row select{width:auto;flex-shrink:0;}
+  .create-uri-preview{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:5px;min-height:14px;word-break:break-all;}
+  .create-uri-preview.invalid{color:var(--error);}
+  .create-preview{
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:var(--bg);
+    padding:9px 11px;
+    margin-bottom:10px;
+    font-family:var(--mono);
+    font-size:12px;
+    line-height:1.5;
+    color:var(--ink);
+    min-height:16px;
+    word-break:break-word;
+  }
+  .create-preview .cp-empty{color:var(--ink-soft);font-family:var(--sans);}
+  .danger-btn{
+    border:1px solid var(--error);
+    color:var(--error);
+    background:var(--panel);
+    padding:7px 14px;
+    border-radius:3px;
+    font-size:13px;
+    font-family:var(--sans);
+    cursor:pointer;
+    margin-top:24px;
+  }
+  .danger-btn:hover{background:var(--error);color:#fff;}
+
+  #downloadBtn:disabled{opacity:.5;cursor:default;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(20,25,35,.45);
+    display:flex;align-items:flex-start;justify-content:center;
+    padding:60px 20px;z-index:50;
+  }
+  .modal{
+    background:var(--panel);border:1px solid var(--line);border-radius:4px;
+    max-width:680px;width:100%;padding:22px 24px;
+    box-shadow:0 12px 40px rgba(0,0,0,.18);max-height:80vh;overflow-y:auto;
+  }
+  .modal-title{margin:0 0 14px;font-size:17px;font-weight:600;}
+  .modal-actions{display:flex;gap:10px;align-items:center;margin-top:14px;}
+  .prefix-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+  .prefix-row input{padding:6px 8px;border:1px solid var(--line);border-radius:3px;font-size:13px;font-family:var(--mono);background:var(--bg);}
+  .prefix-row input:focus{outline:none;border-color:var(--accent);}
+  .prefix-row .prefix-name{width:110px;flex-shrink:0;}
+  .prefix-row .prefix-ns{flex:1;min-width:0;}
+  #addPrefixBtn{margin-top:4px;}
+  #addDefaultPrefixesBtn{margin:4px 0 0 6px;}
+  .prefix-hint{font-size:12px;color:var(--ink-soft);margin-top:6px;min-height:14px;}
+
+  .shapes-dir{display:flex;gap:10px;align-items:center;margin-bottom:14px;}
+  .shapes-dir-path{
+    flex:1;min-width:0;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    border:1px solid var(--line);border-radius:3px;padding:6px 9px;background:var(--bg);
+  }
+  .shapes-file{
+    display:flex;gap:10px;align-items:flex-start;
+    border-bottom:1px solid var(--line);padding:10px 2px;
+  }
+  .shapes-file:first-child{border-top:1px solid var(--line);}
+  .shapes-file input{margin-top:2px;}
+  .shapes-file .sf-main{flex:1;min-width:0;}
+  .shapes-file .sf-name{font-size:13px;font-weight:500;display:block;word-break:break-all;}
+  .shapes-file .sf-meta{font-size:11px;color:var(--ink-soft);font-family:var(--mono);display:block;margin-top:2px;}
+  .shapes-file .sf-desc{font-size:11.5px;color:var(--ink-soft);display:block;margin-top:3px;}
+  .shapes-file .sf-hint{font-size:11.5px;color:var(--amber);display:block;margin-top:3px;}
+
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:#d3cfc5;border-radius:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  @media (max-width:760px){
+    .app{flex-direction:column;}
+    .sidebar{width:100%;height:44vh;border-right:none;border-bottom:1px solid var(--line);}
+    .detail{padding:24px 20px;}
+  }
+
+  html.is-electron header{display:none;}
+  html.is-electron #emptyState{display:none;}
+
+  .welcome{flex:1;display:flex;justify-content:center;padding:56px 24px;overflow-y:auto;min-height:0;}
+  .welcome-panel{width:100%;max-width:520px;}
+  .welcome-panel h2{font-size:22px;font-weight:600;margin:0 0 6px;}
+  .welcome-sub{font-size:13.5px;line-height:1.6;color:var(--ink-soft);margin:0 0 22px;}
+  .welcome-actions{display:flex;gap:10px;margin-bottom:30px;}
+  .welcome-heading{font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-bottom:8px;}
+  .welcome-recents{border-top:1px solid var(--line);}
+  .recent-item{
+    display:block;width:100%;text-align:left;background:none;border:none;
+    border-bottom:1px solid var(--line);border-left:2px solid transparent;
+    padding:10px 8px 10px 7px;cursor:pointer;font-family:var(--sans);
+  }
+  .recent-item:hover{background:var(--bg);border-left-color:var(--accent);}
+  .recent-item .recent-name{display:block;font-size:13.5px;font-weight:500;color:var(--ink);}
+  .recent-item .recent-dir{
+    display:block;font-size:11px;font-family:var(--mono);color:var(--ink-soft);
+    margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .welcome-empty{padding:14px 6px;font-size:13px;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LD<span>Edit</span></h1>
+  <div class="file-controls">
+    <label class="btn primary" id="pickBtn" for="fileInput">Bestand openen…</label>
+    <input type="file" id="fileInput" accept=".ttl,.turtle,.txt">
+    <button class="btn" id="newFileBtn">+ Nieuw model</button>
+    <button class="btn" id="downloadBtn" style="display:none;">Download gewijzigd bestand</button>
+    <button class="btn" id="prefixBtn" style="display:none;">Prefixen</button>
+    <button class="btn" id="shapesBtn" style="display:none;">Bundels…</button>
+    <span id="fileName"></span>
+    <span id="status"></span>
+  </div>
+</header>
+
+<div class="app" id="app">
+  <div class="empty-state" id="emptyState">
+    <div class="drop-target" id="dropTarget">
+      <div class="icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/>
+          <path d="M8.1 6.9 L15.9 6.9 M7.4 8 L11 16.4 M16.6 8 L13 16.4"/>
+        </svg>
+      </div>
+      <p><strong>Sleep een .ttl-bestand hierheen</strong><br>of klik op "Bestand openen" om een Turtle/RDF-bestand te laden en de resources te bekijken en te valideren tegen SHACL-shapes.</p>
+      <p class="empty-state-or">— of —</p>
+      <button type="button" class="btn primary" id="emptyStateNewModelBtn">+ Nieuw model beginnen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="shapesOverlay" style="display:none;">
+  <div class="modal">
+    <h3 class="modal-title">Bundels</h3>
+    <p class="edit-hint" style="margin:0 0 14px;">
+      Een bundel bevat SHACL-shapes plus de bijbehorende ontologie(ën). Kies hieronder het
+      modeltype, of in de zijbalk. De lijst toont per bundel de volledige inhoud.
+    </p>
+    <div class="shapes-dir">
+      <span class="shapes-dir-path" id="shapesDirPath"></span>
+    </div>
+    <div class="shapes-list" id="shapesList"></div>
+    <div class="add-prop-error" id="shapesError"></div>
+    <div class="modal-actions">
+      <button type="button" class="rel-picker-cancel" id="shapesCancelBtn">Sluiten</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="createOverlay" style="display:none;">
+  <div class="modal create-modal">
+    <h3 class="modal-title" id="createModalTitle">Nieuw item</h3>
+    <div id="createModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="prefixOverlay" style="display:none;">
+  <div class="modal">
+    <h3 class="modal-title">Prefixen beheren</h3>
+    <p class="edit-hint" style="margin:0 0 12px;">Pas prefixnamen en namespaces aan. Met de radio kies je de <strong>standaardprefix</strong> die wordt voorgesteld bij het aanmaken van nieuwe resources. Gebruikte IRIs in het model blijven geldig; bij het opslaan worden ze met deze prefixes geschreven.</p>
+    <div class="prefix-list" id="prefixList"></div>
+    <button type="button" class="btn" id="addPrefixBtn">+ Prefix toevoegen</button>
+    <button type="button" class="btn" id="addDefaultPrefixesBtn">Standaardprefixen toevoegen</button>
+    <div class="prefix-hint" id="prefixHint"></div>
+    <div class="add-prop-error" id="prefixError"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn primary" id="prefixSaveBtn">Opslaan</button>
+      <button type="button" class="rel-picker-cancel" id="prefixCancelBtn">Annuleren</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/turtle.js"></script>
+<script src="js/model.js"></script>
+<script src="js/shacl.js"></script>
+<script>
+(function(){
+'use strict';
+
+const parseTurtle = window.LDEdit.turtle.parse;
+const MOD = window.LDEdit.model;
+const SHACL = window.LDEdit.shacl;
+const { RDF, RDFS, OWL, XSD, isCoreURI, LABEL_PREDS, DESC_PREDS, COMMON_PREFIXES, buildModel } = MOD;
+
+/* ================= state ================= */
+
+const app = document.getElementById('app');
+const emptyState = document.getElementById('emptyState');
+const dropTarget = document.getElementById('dropTarget');
+const fileInput = document.getElementById('fileInput');
+const fileNameEl = document.getElementById('fileName');
+const statusEl = document.getElementById('status');
+const downloadBtn = document.getElementById('downloadBtn');
+const newFileBtn = document.getElementById('newFileBtn');
+const prefixBtn = document.getElementById('prefixBtn');
+
+let model = null;
+let selectedId = null;
+let searchQuery = '';
+let classFilter = '';
+let kindFilter = 'individuals';
+let hasUnsavedChanges = false;
+// Blanco nodes die je in deze sessie aanmaakt: die hebben nog geen eigen
+// uitspraken en zouden dus buiten de lijst vallen. Onthoud ze, zodat ze in de
+// lijst staan om aan te vullen.
+const sessionBnodes = new Set();
+let lastScrollTop = 0;
+let prefixWorking = [];
+let defaultPrefixName = '';
+let allResourceOptions = [];
+let allPropertyOptions = [];
+
+// SHACL
+let shapes = null;            // gebouwde shapes-register
+let validation = null;        // laatste validatierapport
+let validationStale = true;
+let shapesState = { dir: '', files: [], applied: [] };
+
+let currentEditableTerms = [];
+let currentEditableLangs = [];
+let currentEditableRels = [];
+let currentDeletables = [];
+
+/* ================= helpers ================= */
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function stripBOM(text){
+  return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+}
+function cssEscape(s){
+  return s.replace(/["\\]/g, '\\$&');
+}
+function curieOf(uri){ return model ? model.curie(uri) : uri; }
+
+// Label uit een geladen ontologie/vocabulaire (de geselecteerde shapes-bestanden).
+// Kandidaten komen van de URI zelf, van een property shape met dit pad en van een
+// node shape met deze targetClass. Taalvoorkeur: Nederlands, dan Engels, dan
+// zonder taal — ongeacht de bron, zodat een Nederlands profiellabel wint van een
+// Engelstalig generiek vocabulariumlabel.
+let ontologyLabelCache = new Map();
+let ontologyLabelCacheFor = null;
+
+function labelTermsFor(g, subject){
+  const terms = [];
+  for(const pred of LABEL_PREDS){
+    g.out(subject, pred).forEach(t => { if(t.type === 'literal') terms.push(t); });
+  }
+  const name = g.first(subject, SHACL.SH+'name');
+  if(name && name.type === 'literal') terms.push(name);
+  return terms;
+}
+
+function pickLabel(terms){
+  const nl = terms.find(t => t.lang === 'nl');
+  if(nl) return nl.value;
+  const en = terms.find(t => t.lang === 'en');
+  if(en) return en.value;
+  const plain = terms.find(t => !t.lang);
+  if(plain) return plain.value;
+  return terms.length ? terms[0].value : null;
+}
+
+function ontologyLabel(uri){
+  const g = shapes && shapes.graph;
+  if(!g) return null;
+  if(ontologyLabelCacheFor !== shapes){ ontologyLabelCache = new Map(); ontologyLabelCacheFor = shapes; }
+  if(ontologyLabelCache.has(uri)) return ontologyLabelCache.get(uri);
+
+  const subjects = [uri];
+  shapes.shapeIds.forEach(id => {
+    const path = g.first(id, SHACL.SH+'path');
+    if(path && path.type === 'uri' && path.value === uri) subjects.push(id);
+    else if(g.out(id, SHACL.SH+'targetClass').some(t => t.value === uri)) subjects.push(id);
+  });
+  const terms = [];
+  subjects.forEach(subject => labelTermsFor(g, subject).forEach(t => terms.push(t)));
+  const label = pickLabel(terms);
+  ontologyLabelCache.set(uri, label);
+  return label;
+}
+
+// Weergavelabel: eerst wat in de data staat, anders het label uit de ontologie,
+// anders de lokale naam.
+function labelOf(uri){
+  if(!model) return uri;
+  if(model.labelTermOf(uri)) return model.labelOf(uri);
+  return ontologyLabel(uri) || model.labelOf(uri);
+}
+
+function rawLabelOf(uri){
+  if(!model) return uri;
+  if(model.labelTermOf(uri)) return model.rawLabelOf(uri);
+  return ontologyLabel(uri) || model.rawLabelOf(uri);
+}
+
+// Omschrijving/definitie uit een geladen ontologie/vocabulaire: van de URI zelf,
+// van een property shape met dit pad, of van een node shape met deze targetClass.
+let ontologyDescCache = new Map();
+let ontologyDescCacheFor = null;
+
+function descriptionTermsFor(g, subject){
+  const terms = [];
+  for(const pred of DESC_PREDS){
+    g.out(subject, pred).forEach(t => { if(t.type === 'literal') terms.push(t); });
+  }
+  g.out(subject, SHACL.SH+'description').forEach(t => { if(t.type === 'literal') terms.push(t); });
+  return terms;
+}
+
+function ontologyDescription(uri){
+  const g = shapes && shapes.graph;
+  if(!g) return null;
+  if(ontologyDescCacheFor !== shapes){ ontologyDescCache = new Map(); ontologyDescCacheFor = shapes; }
+  if(ontologyDescCache.has(uri)) return ontologyDescCache.get(uri);
+
+  const subjects = [uri];
+  shapes.shapeIds.forEach(id => {
+    const path = g.first(id, SHACL.SH+'path');
+    if(path && path.type === 'uri' && path.value === uri) subjects.push(id);
+    else if(g.out(id, SHACL.SH+'targetClass').some(t => t.value === uri)) subjects.push(id);
+  });
+  const terms = [];
+  subjects.forEach(subject => descriptionTermsFor(g, subject).forEach(t => terms.push(t)));
+  const desc = pickLabel(terms);
+  ontologyDescCache.set(uri, desc);
+  return desc;
+}
+
+// Weergaveomschrijving: eerst wat in de data staat, anders uit de ontologie.
+function descOf(uri){
+  if(!model) return null;
+  return model.descOf(uri) || ontologyDescription(uri);
+}
+
+/* ================= SHACL-shapes laden ================= */
+
+function desktop(){ return window.ttlDesktop; }
+
+async function initShapes(){
+  if(!desktop()) return;
+  try{
+    shapesState = await desktop().getShapesState();
+    await loadAppliedShapes();
+  }catch(err){
+    console.error('Kon shapes niet laden:', err);
+  }
+}
+
+async function loadAppliedShapes(){
+  if(!desktop()) return;
+  const files = bundleFiles(shapesState.applied || []);
+  if(!files.length){ shapes = null; return; }
+  const texts = await desktop().readShapes(files);
+  const usable = texts.filter(f => f.text);
+  const parsed = SHACL.parseShapeFiles(usable);
+  shapes = SHACL.buildShapes(parsed);
+}
+
+// Alle bestanden van de gekozen bundels (shapes + ontologieën).
+function bundleFiles(ids){
+  const set = new Set();
+  (shapesState.bundles || []).forEach(b => {
+    if(ids.indexOf(b.id) !== -1) b.files.forEach(f => set.add(f));
+  });
+  return [...set];
+}
+
+function runValidation(){
+  validationStale = false;
+  if(!model || !shapes){ validation = null; return; }
+  try{
+    validation = SHACL.validate(model, shapes);
+  }catch(err){
+    console.error('Validatie mislukt:', err);
+    validation = null;
+  }
+}
+
+function markValidationStale(){ validationStale = true; }
+
+/* ================= Shapes-beheer / modeltype ================= */
+
+// Het gekozen modeltype (één bundel tegelijk).
+function currentModelType(){
+  const applied = shapesState.applied || [];
+  const known = (shapesState.bundles || []).map(b => b.id);
+  return applied.find(id => known.indexOf(id) !== -1) || '';
+}
+
+function bundleSelectOptions(){
+  const current = currentModelType();
+  const opts = ['<option value="">— geen —</option>'];
+  (shapesState.bundles || []).forEach(b => {
+    opts.push(`<option value="${esc(b.id)}"${b.id === current ? ' selected' : ''}>${esc(b.name)}</option>`);
+  });
+  return opts.join('');
+}
+
+async function applyModelType(id){
+  shapesState = await desktop().setAppliedShapes(id ? [id] : []);
+  await loadAppliedShapes();
+  markValidationStale();
+  if(model) renderApp();
+  else updateStatus();
+}
+
+async function openShapesManager(){
+  if(!desktop()){ alert('Bundels zijn alleen beschikbaar in de LDEdit-app.'); return; }
+  shapesState = await desktop().getShapesState();
+  await loadShapeTexts();
+  renderShapesModal();
+  document.getElementById('shapesOverlay').style.display = 'flex';
+}
+
+function renderShapesModal(){
+  document.getElementById('shapesDirPath').textContent = shapesState.dir || '(geen map)';
+  const listEl = document.getElementById('shapesList');
+  const bundles = shapesState.bundles || [];
+  const current = currentModelType();
+  if(!bundles.length){
+    listEl.innerHTML = '<div class="welcome-empty">Geen SHACL-bestanden (.ttl/.shacl) in deze map.</div>';
+    return;
+  }
+  const noneRow = `<label class="shapes-file">
+    <input type="radio" name="bundle" value="" ${current ? '' : 'checked'}>
+    <span class="sf-main">
+      <span class="sf-name">Geen modeltype</span>
+      <span class="sf-desc">Alleen de data bekijken, zonder shapes of ontologie.</span>
+    </span>
+  </label>`;
+  const rows = bundles.map(b => {
+    let meta = '';
+    let hint = '';
+    try{
+      const parsed = SHACL.parseShapeFiles(b.files.map(f => ({ name:f, text: readShapeText(f) })));
+      const built = SHACL.buildShapes(parsed);
+      meta = built.nodeShapeCount + ' node shapes · ' + built.propertyShapeCount + ' property shapes';
+      if(built.nodeShapeCount === 0) hint = 'Geen shapes — wordt als achtergrondontologie gebruikt.';
+    }catch(err){
+      hint = 'Kon deze bundel niet lezen: ' + err.message;
+    }
+    return `<label class="shapes-file">
+      <input type="radio" name="bundle" value="${esc(b.id)}" ${b.id === current ? 'checked' : ''}>
+      <span class="sf-main">
+        <span class="sf-name">${esc(b.name)}</span>
+        <span class="sf-meta">${esc(b.files.join(', '))}</span>
+        ${b.description ? '<span class="sf-desc">' + esc(b.description) + '</span>' : ''}
+        <span class="sf-meta">${esc(meta || '—')}</span>
+        ${hint ? '<span class="sf-hint">' + esc(hint) + '</span>' : ''}
+      </span>
+    </label>`;
+  }).join('');
+  listEl.innerHTML = noneRow + rows;
+  listEl.querySelectorAll('input[name="bundle"]').forEach(r => {
+    r.addEventListener('change', async () => {
+      await applyModelType(r.value);
+      renderShapesModal();
+    });
+  });
+}
+
+let shapeTextCache = {};
+function readShapeText(name){ return shapeTextCache[name] || ''; }
+
+async function loadShapeTexts(){
+  // leest alle bestanden in de map (voor de shape-tellingen in de modal)
+  if(!desktop()) return;
+  const files = await desktop().readShapes(shapesState.files);
+  shapeTextCache = {};
+  files.forEach(f => { shapeTextCache[f.name] = f.text || ''; });
+}
+
+function closeShapesManager(){
+  document.getElementById('shapesOverlay').style.display = 'none';
+}
+
+/* ================= validatie-hulpjes ================= */
+
+function resultsFor(uri){
+  if(!validation) return [];
+  return validation.resultsByNode.get(uri) || [];
+}
+
+function severityRank(results){
+  let v = 0, w = 0, i = 0;
+  results.forEach(r => {
+    if(r.severity === 'violation') v++;
+    else if(r.severity === 'warning') w++;
+    else i++;
+  });
+  return { violation:v, warning:w, info:i };
+}
+
+function validationSummaryHtml(results){
+  if(!shapes) return '';
+  const c = severityRank(results);
+  if(c.violation === 0 && c.warning === 0){
+    return `<div class="validation-summary ok">
+      <div class="vs-title">Voldoet aan de SHACL-shapes</div>
+      <div class="vs-counts">${shapes.nodeShapeCount} node shapes actief${c.info ? ' · ' + c.info + ' niet geëvalueerd' : ''}</div>
+    </div>`;
+  }
+  const parts = [];
+  if(c.violation) parts.push(c.violation + ' fout' + (c.violation === 1 ? '' : 'en'));
+  if(c.warning) parts.push(c.warning + ' waarschuwing' + (c.warning === 1 ? '' : 'en'));
+  return `<div class="validation-summary problems">
+    <div class="vs-title">Voldoet niet aan de SHACL-shapes</div>
+    <div class="vs-counts">${parts.join(' · ')}</div>
+  </div>`;
+}
+
+function termDisplay(term){
+  if(!term) return '';
+  if(term.type === 'uri') return curieOf(term.value);
+  if(term.type === 'bnode') return '_:' + String(term.value).replace(/^_:/, '');
+  let s = '"' + term.value + '"';
+  if(term.lang) s += '@' + term.lang;
+  else if(term.datatype && term.datatype !== XSD+'string') s += '^^' + curieOf(term.datatype);
+  return s;
+}
+
+// Groepeert resultaten op melding, maar bewaart de concrete reden (detail) en
+// de betrokken waarde — een shape heeft vaak één sh:message voor meerdere
+// constraints, waardoor die het werkelijke probleem zou verbergen.
+function distinctMessages(results){
+  const byKey = new Map();
+  results.forEach(r => {
+    const key = r.severity + '|' + r.message;
+    if(!byKey.has(key)) byKey.set(key, { severity:r.severity, message:r.message, details:[], values:[] });
+    const m = byKey.get(key);
+    if(r.detail && r.detail !== r.message && m.details.indexOf(r.detail) === -1) m.details.push(r.detail);
+    const v = termDisplay(r.value);
+    if(v && m.values.indexOf(v) === -1) m.values.push(v);
+  });
+  return [...byKey.values()];
+}
+
+function messagesHtml(results){
+  return distinctMessages(results).map(m => {
+    const why = m.details.slice();
+    if(m.values.length) why.push('bij ' + m.values.slice(0, 3).join(', '));
+    const hint = why.length ? `<span class="vwhy">${esc(why.join(' · '))}</span>` : '';
+    return `<div class="vmsg ${m.severity === 'warning' ? 'warning' : m.severity === 'info' ? 'info' : ''}">${esc(m.message)}${hint}</div>`;
+  }).join('');
+}
+
+function requiredMissingFor(uri){
+  if(!validation || !validation.validator) return [];
+  const vmodel = validation.model || model;
+  return validation.validator.requiredPropertyShapes(uri).filter(r => {
+    return SHACL.valuesForPath(vmodel, uri, { kind:'pred', iri:r.path }).length === 0;
+  });
+}
+
+// Property shapes die volgens de geselecteerde SHACL-shapes bij dit item horen
+// (op basis van zijn klasse, inclusief overerving).
+function applicablePropertyShapes(uri){
+  if(!validation || !validation.validator) return [];
+  return validation.validator.propertyShapesFor(uri).filter(ps => ps.path);
+}
+
+// Keuzelijst voor de eigenschap/relatie: eerst wat de shapes bij de klasse
+// voorschrijven, daarna de eigenschappen die al in het model voorkomen.
+function shapePropertyOptions(uri){
+  return applicablePropertyShapes(uri).map(ps => {
+    const label = rawLabelOf(ps.path);
+    const cur = model.curie(ps.path);
+    return { uri:ps.path, label, curie:cur, expected:ps.expected, defaultValue:ps.defaultValue, searchText:(label+' '+cur+' '+ps.path).toLowerCase() };
+  });
+}
+
+// Datatype(s) die de shapes voor deze eigenschap voorschrijven.
+function expectedDatatypesFor(uri, path){
+  return applicablePropertyShapes(uri)
+    .filter(ps => ps.path === path && ps.expected && ps.expected.kind === 'literal')
+    .reduce((acc, ps) => {
+      (ps.expected.datatypes || (ps.expected.datatype ? [ps.expected.datatype] : [])).forEach(dt => {
+        if(acc.indexOf(dt) === -1) acc.push(dt);
+      });
+      return acc;
+    }, []);
+}
+
+// Datatype(namen) wanneer een taal-tag niet is toegestaan — dus wanneer de
+// shapes een datatype eisen en geen daarvan rdf:langString is.
+function languageBlockedBy(uri, path){
+  const dts = expectedDatatypesFor(uri, path);
+  if(!dts.length || dts.indexOf(RDF+'langString') !== -1) return null;
+  return dts.map(curieOf).join(' of ');
+}
+
+function propertyOptionsFor(uri){
+  const fromShapes = shapePropertyOptions(uri);
+  const seen = new Set(fromShapes.map(o => o.uri));
+  return { fromShapes, all: fromShapes.concat(allPropertyOptions.filter(o => !seen.has(o.uri))) };
+}
+
+function expectedHint(expected){
+  if(!expected) return 'vrije waarde';
+  if(expected.kind === 'literal'){
+    const dts = expected.datatypes && expected.datatypes.length ? expected.datatypes : (expected.datatype ? [expected.datatype] : []);
+    return dts.map(curieOf).join(' of ') || 'literal';
+  }
+  if(expected.kind === 'class') return curieOf(expected.class) || 'resource';
+  if(expected.kind === 'nodeKind'){
+    if(expected.types.indexOf('literal') !== -1 && expected.types.length === 1) return 'literal';
+    if(expected.types.indexOf('uri') !== -1 || expected.types.indexOf('bnode') !== -1) return 'resource';
+    return 'literal of resource';
+  }
+  return 'vrije waarde';
+}
+
+function preferredKind(expected){
+  if(!expected) return 'literal';
+  if(expected.kind === 'class') return 'relatie';
+  if(expected.kind === 'nodeKind' && expected.types.indexOf('literal') === -1) return 'relatie';
+  return 'literal';
+}
+
+/* ================= bestand laden ================= */
+
+async function loadFile(file){
+  fileNameEl.textContent = file.name;
+  statusEl.textContent = 'Laden…';
+  statusEl.className = '';
+  const text = await file.text();
+  try{
+    model = buildModel(parseTurtle(stripBOM(text)));
+    sessionBnodes.clear();
+    selectedId = null;
+    searchQuery = '';
+    classFilter = '';
+    kindFilter = 'individuals';
+    hasUnsavedChanges = false;
+    rebuildOptions();
+    downloadBtn.style.display = 'inline-block';
+    prefixBtn.style.display = 'inline-block';
+    markValidationStale();
+    updateDownloadState();
+    updateStatus();
+    renderApp();
+  }catch(err){
+    model = null;
+    statusEl.textContent = 'Fout: ' + err.message;
+    statusEl.className = 'error';
+    console.error(err);
+    showLoadError(err.message);
+  }
+}
+
+function showLoadError(message){
+  app.innerHTML = `
+    <div class="empty-state">
+      <div class="drop-target" style="border-color:var(--error);">
+        <div class="icon" style="color:var(--error);border-color:var(--error);">!</div>
+        <p><strong>Kon het bestand niet verwerken.</strong><br>${esc(message)}</p>
+      </div>
+    </div>`;
+}
+
+function updateStatus(){
+  if(!model) return;
+  const active = shapesState.applied ? shapesState.applied.length : 0;
+  const items = currentItems().length;
+  statusEl.textContent = items + ' item' + (items === 1 ? '' : 's') +
+    ' · ' + model.tripleCount + ' triples' +
+    (active ? ' · ' + active + ' shapebundel' + (active === 1 ? '' : 's') : ' · geen shapebundels') +
+    (hasUnsavedChanges ? ' · gewijzigd' : '');
+  statusEl.className = '';
+}
+
+fileInput.addEventListener('change', e => {
+  if(e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+});
+['dragenter','dragover'].forEach(evt => {
+  dropTarget.addEventListener(evt, e => { e.preventDefault(); dropTarget.classList.add('dragover'); });
+});
+['dragleave','drop'].forEach(evt => {
+  dropTarget.addEventListener(evt, e => { e.preventDefault(); dropTarget.classList.remove('dragover'); });
+});
+dropTarget.addEventListener('drop', e => {
+  e.stopPropagation();
+  if(e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+document.body.addEventListener('dragover', e => e.preventDefault());
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file) loadFile(file);
+});
+
+/* ================= nieuw model ================= */
+
+function startNewModel(){
+  if(model && hasUnsavedChanges){
+    if(!confirm('Je hebt niet-opgeslagen wijzigingen in het huidige model. Weet je zeker dat je een nieuw model wilt beginnen?')) return;
+  }
+  renderNewModelForm();
+}
+
+function renderNewModelForm(){
+  app.innerHTML = `
+    <div class="empty-state">
+      <div class="drop-target new-model-form">
+        <p style="text-align:center;"><strong>Nieuw model beginnen</strong><br>Kies een prefix en namespace voor je eigen vocabulaire.</p>
+        <div class="add-prop-row">
+          <div class="add-prop-label">Prefix</div>
+          <input type="text" id="newModelPrefix" value="ex">
+        </div>
+        <div class="add-prop-row">
+          <div class="add-prop-label">Namespace-URI</div>
+          <input type="text" id="newModelNamespace" value="https://voorbeeld.nl/model#">
+        </div>
+        <div class="add-prop-row">
+          <div class="add-prop-label">Bestandsnaam</div>
+          <input type="text" id="newModelFilename" value="nieuw-model.ttl">
+        </div>
+        <div class="add-prop-error" id="newModelError"></div>
+        <div class="add-prop-actions">
+          <button type="button" class="btn primary" id="newModelSubmit">Model aanmaken</button>
+          <button type="button" class="rel-picker-cancel" id="newModelCancel">Annuleren</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('newModelCancel').addEventListener('click', () => {
+    if(model) renderApp(); else showStartScreen();
+  });
+  document.getElementById('newModelSubmit').addEventListener('click', () => {
+    const errorEl = document.getElementById('newModelError');
+    errorEl.textContent = '';
+    const prefix = document.getElementById('newModelPrefix').value.trim();
+    const ns = document.getElementById('newModelNamespace').value.trim();
+    const filename = document.getElementById('newModelFilename').value.trim() || 'nieuw-model.ttl';
+    if(!prefix || !/^[A-Za-z][\w-]*$/.test(prefix)){ errorEl.textContent = 'Vul een geldige prefix in.'; return; }
+    if(COMMON_PREFIXES.some(([name]) => name === prefix)){ errorEl.textContent = 'Deze prefix is gereserveerd — kies een andere.'; return; }
+    if(!ns || !/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(ns)){ errorEl.textContent = 'Vul een geldige namespace-URI in.'; return; }
+    createNewModel(prefix, ns, filename);
+  });
+  document.getElementById('newModelPrefix').focus();
+}
+
+function createNewModel(prefix, namespace, filename){
+  model = buildModel({ prefixes: { [prefix]: namespace }, triples: [] });
+  sessionBnodes.clear();
+  selectedId = null;
+  searchQuery = '';
+  classFilter = '';
+  kindFilter = 'individuals';
+  hasUnsavedChanges = false;
+  rebuildOptions();
+  fileNameEl.textContent = filename;
+  if(desktop()) desktop().setDocument(null);
+  downloadBtn.style.display = 'inline-block';
+  prefixBtn.style.display = 'inline-block';
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  renderApp();
+}
+
+/* ================= startscherm ================= */
+
+function showStartScreen(){
+  if(!desktop()){
+    app.innerHTML = '';
+    app.appendChild(emptyState);
+    return;
+  }
+  app.innerHTML = `
+    <div class="welcome">
+      <div class="welcome-panel">
+        <h2>LDEdit</h2>
+        <p class="welcome-sub">Kies een recent bestand, begin een nieuw model, of open een ander bestand. Valideer daarna je resources tegen SHACL-shapes.</p>
+        <div class="welcome-actions">
+          <button type="button" class="btn primary" id="welcomeNewBtn">+ Nieuw model</button>
+          <button type="button" class="btn" id="welcomeOpenBtn">Ander bestand openen…</button>
+          <button type="button" class="btn" id="welcomeShapesBtn">Bundels…</button>
+        </div>
+        <div class="welcome-heading">Recente bestanden</div>
+        <div class="welcome-recents" id="welcomeRecents"><div class="welcome-empty">Laden…</div></div>
+      </div>
+    </div>`;
+  document.getElementById('welcomeNewBtn').addEventListener('click', startNewModel);
+  document.getElementById('welcomeOpenBtn').addEventListener('click', () => desktop().openDialog());
+  document.getElementById('welcomeShapesBtn').addEventListener('click', () => openShapesManager(false));
+  loadRecentFiles();
+}
+
+function loadRecentFiles(){
+  const listEl = document.getElementById('welcomeRecents');
+  if(!listEl) return;
+  desktop().getRecentFiles().then(files => {
+    if(!listEl.isConnected) return;
+    if(!files.length){
+      listEl.innerHTML = '<div class="welcome-empty">Nog geen recente bestanden.</div>';
+      return;
+    }
+    listEl.innerHTML = files.map(f => `
+      <button type="button" class="recent-item" data-path="${esc(f.path)}">
+        <span class="recent-name">${esc(f.name)}</span>
+        <span class="recent-dir">${esc(f.dir)}</span>
+      </button>`).join('');
+    listEl.querySelectorAll('.recent-item').forEach(btn => {
+      btn.addEventListener('click', () => desktop().openPath(btn.dataset.path));
+    });
+  }).catch(err => {
+    listEl.innerHTML = '<div class="welcome-empty">Kon recente bestanden niet ophalen.</div>';
+    console.error(err);
+  });
+}
+
+/* ================= hoofdweergave ================= */
+
+function renderApp(){
+  if(!model){ showStartScreen(); return; }
+  if(validationStale) runValidation();
+
+  app.innerHTML = `
+    <div class="sidebar">
+      <div class="filters">
+        <label for="kindFilter">Filter op soort</label>
+        <select id="kindFilter">
+          <option value="individuals">Instanties</option>
+          <option value="classes">Klassen</option>
+          <option value="dataproperties">Eigenschappen</option>
+          <option value="objectproperties">Relaties</option>
+        </select>
+      </div>
+      <div class="filters">
+        <label for="classFilter">Filter op klasse</label>
+        <select id="classFilter">${classFilterOptions()}</select>
+      </div>
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Zoeken…" value="${esc(searchQuery)}">
+      </div>
+      <div class="filters">
+        <label for="bundleSelect">Modeltype</label>
+        <div class="bundle-row">
+          <select id="bundleSelect">${bundleSelectOptions()}</select>
+          <button type="button" class="btn" id="addItemBtn">+ Nieuwe resource</button>
+        </div>
+      </div>
+      <div class="list" id="listEl"></div>
+    </div>
+    <div class="detail" id="detailEl"></div>
+  `;
+
+  const bundleSel = document.getElementById('bundleSelect');
+  bundleSel.addEventListener('change', () => applyModelType(bundleSel.value));
+
+  const kindSel = document.getElementById('kindFilter');
+  kindSel.value = kindFilter;
+  kindSel.addEventListener('change', () => {
+    kindFilter = kindSel.value;
+    selectedId = null;
+    renderApp();
+  });
+
+  const classSel = document.getElementById('classFilter');
+  classSel.value = classFilter;
+  classSel.addEventListener('change', () => {
+    classFilter = classSel.value;
+    selectedId = null;
+    updateStatus();
+    renderList();
+    renderDetail();
+  });
+
+  const searchInput = document.getElementById('searchInput');
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value;
+    renderList();
+  });
+  searchInput.focus();
+  searchInput.value = searchQuery;
+  searchInput.selectionStart = searchInput.selectionEnd = searchQuery.length;
+
+  document.getElementById('addItemBtn').addEventListener('click', openCreateItemModal);
+
+  updateStatus();
+  renderList();
+  renderDetail();
+}
+
+function classFilterOptions(){
+  const opts = ['<option value="">Alle klassen</option>'];
+  model.classes.forEach(u => {
+    opts.push(`<option value="${esc(u)}">${esc(labelOf(u))}</option>`);
+  });
+  return opts.join('');
+}
+
+// Maakt de items zichtbaar voor de gekozen soort, en past het klassefilter toe.
+// Het klassefilter werkt per soort: instanties op rdf:type, klassen op
+// rdfs:subClassOf, eigenschappen en relaties op hun rdfs:domain.
+function currentItems(){
+  let items;
+  if(kindFilter === 'classes') items = model.classes.slice();
+  else if(kindFilter === 'dataproperties') items = model.properties.filter(p => model.propKind[p] === 'eigenschap');
+  else if(kindFilter === 'objectproperties') items = model.properties.filter(p => model.propKind[p] === 'relatie');
+  else items = individualList();
+  items = items.filter(isDefinedItem);
+  if(classFilter) items = items.filter(u => matchesClassFilter(u));
+  return items;
+}
+
+// De instanties uit het model, aangevuld met knooppunten die daar in deze sessie
+// bij kwamen: een blanco node die je net als waarde hebt aangemaakt staat nog
+// niet in model.individuals, en een blanco node waar je voor het eerst iets over
+// zegt hoort er vanaf dat moment bij — net als bij het laden.
+function individualList(){
+  const items = model.individuals.slice();
+  const seen = new Set(items);
+  Object.keys(model.nodes).forEach(id => {
+    if(seen.has(id)) return;
+    if(model.classes.includes(id) || model.properties.includes(id)) return;
+    const node = model.nodes[id];
+    const typed = [...node.types].some(t => !isCoreURI(t));
+    if(!typed && node.out.length === 0 && !sessionBnodes.has(id)) return;
+    seen.add(id);
+    items.push(id);
+  });
+  return items.sort((a, b) => labelOf(a).localeCompare(labelOf(b)));
+}
+
+// Alleen items waar het bestand zelf iets over zegt (die als subject voorkomen).
+// Wat enkel genoemd wordt — bijvoorbeeld een klasse die je alleen als rdf:type
+// gebruikt — hoort niet in de lijst.
+function isDefinedItem(uri){
+  const node = model.nodes[uri];
+  return Boolean(node && node.out.length > 0) || sessionBnodes.has(uri);
+}
+
+function matchesClassFilter(uri){
+  if(kindFilter === 'classes') return isSubclassOrSelf(uri, classFilter, new Set());
+  if(kindFilter === 'dataproperties' || kindFilter === 'objectproperties') return hasDomain(uri, classFilter);
+  const node = model.nodes[uri];
+  if(!node) return false;
+  return expandTypes(node.types).has(classFilter);
+}
+
+// Typen inclusief hun rdfs:subClassOf-voorouders.
+function expandTypes(types){
+  const out = new Set();
+  const stack = [...types];
+  while(stack.length){
+    const t = stack.pop();
+    if(out.has(t)) continue;
+    out.add(t);
+    const node = model.nodes[t];
+    if(node) node.out.forEach(o => { if(o.p === RDFS+'subClassOf' && o.o.type === 'uri') stack.push(o.o.value); });
+  }
+  return out;
+}
+
+function isSubclassOrSelf(uri, cls, seen){
+  if(uri === cls) return true;
+  if(seen.has(uri)) return false;
+  seen.add(uri);
+  const node = model.nodes[uri];
+  if(!node) return false;
+  return node.out.some(o => o.p === RDFS+'subClassOf' && o.o.type === 'uri' && isSubclassOrSelf(o.o.value, cls, seen));
+}
+
+function hasDomain(uri, cls){
+  const node = model.nodes[uri];
+  if(!node) return false;
+  return node.out.some(o => o.p === RDFS+'domain' && o.o.type === 'uri' && o.o.value === cls);
+}
+
+function renderList(){
+  const listEl = document.getElementById('listEl');
+  if(!listEl) return;
+  if(validationStale) runValidation();
+  let items = currentItems();
+  const q = searchQuery.trim().toLowerCase();
+  if(q){
+    items = items.filter(uri => labelOf(uri).toLowerCase().includes(q) || uri.toLowerCase().includes(q) || curieOf(uri).toLowerCase().includes(q));
+  }
+
+  if(items.length === 0){
+    listEl.innerHTML = '<div class="list-empty">Geen items</div>';
+    return;
+  }
+
+  listEl.innerHTML = items.map(itemHtml).join('');
+
+  listEl.querySelectorAll('.list-item').forEach(el => {
+    el.addEventListener('click', () => {
+      selectedId = el.dataset.uri;
+      renderDetail();
+      listEl.querySelectorAll('.list-item').forEach(x => x.classList.remove('selected'));
+      el.classList.add('selected');
+    });
+  });
+}
+
+function itemHtml(uri){
+  const sel = uri === selectedId ? 'selected' : '';
+  const res = resultsFor(uri);
+  const c = severityRank(res);
+  let badge = '';
+  if(c.violation) badge = `<span class="list-badge violation" title="${c.violation} fout(en)">${c.violation}</span>`;
+  else if(c.warning) badge = `<span class="list-badge warning" title="${c.warning} waarschuwing(en)">${c.warning}</span>`;
+  return `<div class="list-item ${sel}" data-uri="${esc(uri)}">
+    <span class="label">${esc(labelOf(uri))}<span class="sub">${esc(curieOf(uri))}</span></span>
+    ${badge}
+  </div>`;
+}
+
+/* ================= detail ================= */
+
+function renderDetail(){
+  const detailEl = document.getElementById('detailEl');
+  if(!detailEl) return;
+  if(validationStale) runValidation();
+  currentEditableTerms = [];
+  currentEditableLangs = [];
+  currentEditableRels = [];
+  currentDeletables = [];
+  if(!selectedId){
+    detailEl.innerHTML = '<div class="detail-empty">Selecteer een item in de lijst.<br>Waarden zijn direct te bewerken; overtredingen van de SHACL-shapes worden gemarkeerd.</div>';
+    return;
+  }
+  const uri = selectedId;
+  const node = model.nodes[uri];
+  if(!node){
+    detailEl.innerHTML = '<div class="detail-empty">Onbekend item.</div>';
+    return;
+  }
+  const kind = kindLabelFor(uri);
+
+  const res = resultsFor(uri);
+  const byPath = {};
+  const nodeLevel = [];
+  res.forEach(r => { if(r.path){ (byPath[r.path] = byPath[r.path] || []).push(r); } else nodeLevel.push(r); });
+  const missing = res.filter(r => r.component === 'MinCount');
+  const missingPaths = {};
+  missing.forEach(r => { if(r.path) missingPaths[r.path] = r; });
+
+  let html = `<div class="detail-kind">${esc(kind)}</div>`;
+  let headingLabel = null, headingPred = null, headingTerm = null;
+  const prefLabel = node.out.find(o => o.p === 'http://www.w3.org/2004/02/skos/core#prefLabel' && o.o.type === 'literal');
+  const rdfsLabel = node.out.find(o => o.p === RDFS+'label' && o.o.type === 'literal');
+  if(prefLabel){ headingLabel = prefLabel.o.value; headingPred = 'skos:prefLabel'; headingTerm = prefLabel.o; }
+  else if(rdfsLabel){ headingLabel = rdfsLabel.o.value; headingPred = 'rdfs:label'; headingTerm = rdfsLabel.o; }
+
+  if(headingTerm){
+    const idx = currentEditableTerms.length;
+    currentEditableTerms.push(headingTerm);
+    html += `<div class="detail-heading"><h2 class="editable-title" contenteditable="true" spellcheck="false" data-eidx="${idx}">${esc(headingLabel)}</h2>`;
+    if(headingPred) html += `<span class="detail-label-pred">${esc(headingPred)}</span>`;
+    html += `</div>`;
+  } else {
+    html += `<h2 class="resource-title">${esc(node.isBnode ? 'blanco node' : rawLabelOf(uri))}</h2>`;
+  }
+  const cur = model.curie(uri);
+  html += cur !== uri ? `<div class="uri">${esc(cur)} · ${esc(uri)}</div>` : `<div class="uri">${esc(uri)}</div>`;
+
+  const types = [...node.types].filter(t => !isCoreURI(t));
+  if(types.length){
+    html += `<div class="detail-heading" style="margin-bottom:18px;">
+      <span class="detail-label-pred">klasse</span>
+      ${types.sort((a,b) => labelOf(a).localeCompare(labelOf(b))).map(t => `<a class="pval-link" data-uri="${esc(t)}">${esc(labelOf(t))}</a>`).join(', ')}
+    </div>`;
+  }
+
+  const description = descOf(uri);
+  if(description) html += `<p class="detail-description">${esc(description)}</p>`;
+
+  html += validationSummaryHtml(res);
+
+  if(missingPaths && Object.keys(missingPaths).length){
+    html += '<div class="section-title">Ontbrekende verplichte eigenschappen</div>';
+    html += '<div class="prop-table">';
+    Object.keys(missingPaths).sort((a,b) => labelOf(a).localeCompare(labelOf(b))).forEach(p => {
+      const r = missingPaths[p];
+      html += `<div class="prop-row invalid">
+        <div class="pname">${esc(rawLabelOf(p))}<span class="puri">${esc(curieOf(p))}</span></div>
+        <div class="pvals">
+          <div class="vmsg">${esc(r.message)}</div>
+          <button type="button" class="btn missing-add" data-path="${esc(p)}" style="align-self:flex-start;margin-top:4px;">+ Toevoegen</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if(nodeLevel.length){
+    html += '<div class="section-title">Validatie (shape-niveau)</div>';
+    html += '<div class="prop-table"><div class="prop-row"><div class="pname">—</div><div class="pvals">' + messagesHtml(nodeLevel) + '</div></div></div>';
+  }
+
+  const grouped = {};
+  node.out.forEach(({p,o}) => { (grouped[p] = grouped[p] || []).push(o); });
+  const predKeys = Object.keys(grouped).sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+  if(predKeys.length){
+    html += '<div class="prop-table">';
+    predKeys.forEach(p => {
+      const pathRes = byPath[p] || [];
+      const invalid = pathRes.some(r => r.severity !== 'info');
+      html += `<div class="prop-row ${invalid ? 'invalid' : ''}">
+        <div class="pname">${esc(rawLabelOf(p))}<span class="puri">${esc(curieOf(p))}</span></div>
+        <div class="pvals">`;
+      grouped[p].forEach(o => {
+        const vres = pathRes.filter(r => r.value && SHACL.sameTerm(r.value, o));
+        html += valHtml(o, true, uri, p, vres.length > 0);
+      });
+      if(pathRes.length) html += messagesHtml(pathRes);
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  const incoming = node.in.filter(({p}) => p !== RDF+'type');
+  if(incoming.length){
+    const groupedIn = {};
+    incoming.forEach(({p,s}) => { (groupedIn[p] = groupedIn[p] || []).push(s); });
+    html += '<div class="section-title">Gebruikt door</div>';
+    html += '<div class="prop-table">';
+    Object.keys(groupedIn).sort((a,b) => labelOf(a).localeCompare(labelOf(b))).forEach(p => {
+      html += `<div class="prop-row">
+        <div class="pname">${esc(rawLabelOf(p))}<span class="puri">${esc(curieOf(p))}</span></div>
+        <div class="pvals">${groupedIn[p].map(s => valHtml(s, false, null, null, false)).join('')}</div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<button type="button" class="btn add-prop-btn" id="addPropBtn">+ Eigenschap of relatie toevoegen</button>`;
+  html += `<div><button type="button" class="danger-btn" id="deleteResourceBtn">Verwijder deze ${esc(kind.toLowerCase())}</button></div>`;
+
+  detailEl.innerHTML = html;
+  detailEl.scrollTop = lastScrollTop;
+  attachDetailListeners(detailEl, uri);
+}
+
+function attachDetailListeners(detailEl, uri){
+  detailEl.querySelectorAll('.pval-link').forEach(el => {
+    el.addEventListener('click', () => navigateTo(el.dataset.uri));
+  });
+  detailEl.querySelectorAll('[data-eidx]').forEach(el => {
+    el.addEventListener('blur', () => commitEdit(el));
+    el.addEventListener('keydown', e => {
+      if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); el.blur(); }
+      else if(e.key === 'Escape'){ el.blur(); }
+    });
+  });
+  detailEl.querySelectorAll('.rel-edit-btn').forEach(el => {
+    el.addEventListener('click', () => openRelPicker(el.dataset.relidx));
+  });
+  detailEl.querySelectorAll('.lang-edit').forEach(el => {
+    el.addEventListener('change', () => commitLang(el));
+  });
+  detailEl.querySelectorAll('.val-delete-btn').forEach(el => {
+    el.addEventListener('click', () => {
+      const info = currentDeletables[parseInt(el.dataset.delidx, 10)];
+      if(info) deleteTripleValue(info.subjectUri, info.predicateUri, info.term);
+    });
+  });
+  detailEl.querySelectorAll('.missing-add').forEach(el => {
+    el.addEventListener('click', () => openAddPropertyForm(uri, el.dataset.path));
+  });
+  const addBtn = detailEl.querySelector('#addPropBtn');
+  if(addBtn) addBtn.addEventListener('click', () => openAddPropertyForm(uri));
+  const delResBtn = detailEl.querySelector('#deleteResourceBtn');
+  if(delResBtn) delResBtn.addEventListener('click', () => {
+    const kind = kindLabelFor(uri);
+    if(confirm(`Weet je zeker dat je deze ${kind.toLowerCase()} "${labelOf(uri)}" wilt verwijderen? Alle eigenschappen en relaties ervan verdwijnen, en verwijzingen ernaartoe worden ontkoppeld.`)){
+      deleteResource(uri);
+      hasUnsavedChanges = true;
+      markValidationStale();
+      updateDownloadState();
+      updateStatus();
+      selectedId = null;
+      renderApp();
+    }
+  });
+}
+
+function commitEdit(el){
+  const idx = parseInt(el.dataset.eidx, 10);
+  const term = currentEditableTerms[idx];
+  if(!term) return;
+  const newVal = el.innerText.replace(/\n+$/,'');
+  if(newVal === term.value) return;
+  term.value = newVal;
+  hasUnsavedChanges = true;
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  const detailEl = document.getElementById('detailEl');
+  lastScrollTop = detailEl ? detailEl.scrollTop : 0;
+  renderList();
+  renderDetail();
+}
+
+function commitLang(el){
+  const idx = parseInt(el.dataset.lidx, 10);
+  const term = currentEditableLangs[idx];
+  if(!term) return;
+  const newLang = el.value;
+  const oldLang = term.lang || '';
+  if(newLang === oldLang) return;
+  if(newLang){ term.lang = newLang; delete term.datatype; }
+  else { delete term.lang; term.datatype = XSD+'string'; }
+  hasUnsavedChanges = true;
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  const detailEl = document.getElementById('detailEl');
+  lastScrollTop = detailEl ? detailEl.scrollTop : 0;
+  renderList();
+  renderDetail();
+}
+
+function updateDownloadState(){
+  downloadBtn.textContent = hasUnsavedChanges ? 'Download gewijzigd bestand •' : 'Download bestand';
+  if(desktop()) desktop().setDirty(hasUnsavedChanges);
+}
+
+/* ================= waarde-weergave ================= */
+
+function valHtml(term, editable, subjectUri, predicateUri, invalid){
+  if(term.type === 'literal'){
+    let extra = '';
+    // Een taal-tag maakt van de literal een rdf:langString; als de shape een
+    // ander datatype eist (bv. xsd:string) is dat een overtreding. Bied de
+    // taalkeuze dan niet aan en markeer een bestaande taal-tag.
+    const langBlocked = (subjectUri && predicateUri) ? languageBlockedBy(subjectUri, predicateUri) : null;
+    if(editable && !langBlocked && (term.lang || !term.datatype || term.datatype === XSD+'string')){
+      const langIdx = currentEditableLangs.length;
+      currentEditableLangs.push(term);
+      const current = term.lang || '';
+      const common = LANGUAGE_OPTIONS;
+      let options = common.map(([v,label]) => `<option value="${esc(v)}"${v===current?' selected':''}>${esc(label)}</option>`).join('');
+      if(current && !common.some(([v]) => v === current)) options += `<option value="${esc(current)}" selected>@${esc(current)}</option>`;
+      extra = `<select class="lang-edit" data-lidx="${langIdx}" title="Taal wijzigen">${options}</select>`;
+    }
+    else if(term.lang) extra = langBlocked
+      ? `<span class="lang-tag lang-blocked" title="${esc('De shape verwacht ' + langBlocked + '; een taal-tag is hier niet toegestaan')}">@${esc(term.lang)}</span>`
+      : `<span class="lang-tag">@${esc(term.lang)}</span>`;
+    else if(term.datatype && term.datatype !== XSD+'string') extra = `<span class="lang-tag">${esc(curieOf(term.datatype))}</span>`;
+    const isDesc = predicateUri && DESC_PREDS.includes(predicateUri);
+    const valClass = isDesc ? 'pval pval-description' : 'pval';
+    if(editable){
+      const idx = currentEditableTerms.length;
+      currentEditableTerms.push(term);
+      const delIdx = currentDeletables.length;
+      currentDeletables.push({ term, subjectUri, predicateUri });
+      return `<div class="pval-wrap ${invalid ? 'invalid' : ''}"><div class="${valClass} pval-editable" contenteditable="true" spellcheck="false" data-eidx="${idx}">${esc(term.value)}</div>${extra}<button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze waarde">×</button></div>`;
+    }
+    return `<div class="${valClass}">${esc(term.value)}${extra}</div>`;
+  }
+  const uri = term.value;
+  const isBnode = term.type === 'bnode';
+  const bnodeLabel = isBnode ? 'blanco node' : labelOf(uri);
+  const bnodeSub = isBnode ? uri : curieOf(uri);
+  const linkHtml = `<a class="pval-link" data-uri="${esc(uri)}">${esc(bnodeLabel)}<span class="pv-uri">${esc(bnodeSub)}</span></a>`;
+  if(editable && term.type !== 'literal'){
+    const relIdx = currentEditableRels.length;
+    currentEditableRels.push({ term, subjectUri, predicateUri });
+    const delIdx = currentDeletables.length;
+    currentDeletables.push({ term, subjectUri, predicateUri });
+    return `<div class="rel-wrap ${invalid ? 'invalid' : ''}" data-relidx="${relIdx}">${linkHtml}<button type="button" class="rel-edit-btn" data-relidx="${relIdx}" title="Wijzig verwijzing">✎</button><button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze relatie">×</button></div>`;
+  }
+  return linkHtml;
+}
+
+/* ================= navigatie ================= */
+
+function kindLabelFor(uri){
+  if(model.classes.includes(uri)) return 'Klasse';
+  if(model.propKind[uri] === 'relatie') return 'Relatie';
+  if(model.propKind[uri] === 'eigenschap') return 'Eigenschap';
+  return 'Instantie';
+}
+
+// Enkelvoudige soortnaam (kleine letter) bij het huidige soort-filter.
+function kindNoun(kind){
+  if(kind === 'classes') return 'klasse';
+  if(kind === 'dataproperties') return 'eigenschap';
+  if(kind === 'objectproperties') return 'relatie';
+  return 'resource';
+}
+
+function kindForUri(uri){
+  if(model.classes.includes(uri)) return 'classes';
+  if(model.propKind[uri] === 'relatie') return 'objectproperties';
+  if(model.propKind[uri] === 'eigenschap') return 'dataproperties';
+  return 'individuals';
+}
+
+function navigateTo(uri){
+  selectedId = uri;
+  searchQuery = '';
+  classFilter = '';
+  kindFilter = kindForUri(uri);
+  renderApp();
+  const sel = document.querySelector(`.list-item[data-uri="${cssEscape(uri)}"]`);
+  if(sel) sel.scrollIntoView({ block:'nearest' });
+}
+
+/* ================= relatie-bewerken ================= */
+
+function removeIncoming(targetUri, predicateUri, subjectUri){
+  const targetNode = model.nodes[targetUri];
+  if(!targetNode) return;
+  const idx = targetNode.in.findIndex(e => e.p === predicateUri && e.s && e.s.value === subjectUri);
+  if(idx >= 0) targetNode.in.splice(idx, 1);
+}
+
+function addIncoming(targetUri, predicateUri, subjectUri){
+  let targetNode = model.nodes[targetUri];
+  if(!targetNode){
+    targetNode = { id:targetUri, isBnode:targetUri.indexOf('_:') === 0, out:[], in:[], types:new Set() };
+    model.nodes[targetUri] = targetNode;
+  }
+  targetNode.in.push({ p:predicateUri, s:{ type: subjectUri.indexOf('_:') === 0 ? 'bnode' : 'uri', value:subjectUri } });
+}
+
+function resolveTypedInput(raw){
+  raw = raw.trim();
+  if(!raw) return null;
+  if(raw.indexOf('://') !== -1 || /^urn:/i.test(raw)) return raw;
+  if(/^_:[A-Za-z][\w.-]*$/.test(raw) && model.nodes[raw] && model.nodes[raw].isBnode) return raw;
+  const m = raw.match(/^([A-Za-z][\w-]*)?:(.+)$/);
+  if(m){
+    const prefix = m[1] || '';
+    const local = m[2];
+    if(model.prefixes[prefix] !== undefined && local.indexOf(' ') === -1) return model.prefixes[prefix] + local;
+  }
+  return null;
+}
+
+function renderRelOptions(query, listEl, relIdx){
+  const q = query.trim().toLowerCase();
+  if(!q){
+    listEl.innerHTML = '<div class="rel-option-empty">Begin met typen om te zoeken, of plak een volledige URI of verkorte naam.</div>';
+    return;
+  }
+  const matches = [];
+  for(const opt of allResourceOptions){
+    if(opt.searchText.indexOf(q) !== -1){ matches.push(opt); if(matches.length >= 8) break; }
+  }
+  if(!matches.length){
+    listEl.innerHTML = '<div class="rel-option-empty">Geen overeenkomsten. Druk op Enter om de getypte URI of verkorte naam te gebruiken.</div>';
+    return;
+  }
+  listEl.innerHTML = matches.map(o => `<div class="rel-option" data-uri="${esc(o.uri)}"><span class="label">${esc(o.label)}</span><span class="sub">${esc(o.curie)}</span></div>`).join('');
+  listEl.querySelectorAll('.rel-option').forEach(el => {
+    el.addEventListener('mousedown', ev => { ev.preventDefault(); commitRelation(relIdx, el.dataset.uri); });
+  });
+}
+
+function openRelPicker(relIdx){
+  const detailEl = document.getElementById('detailEl');
+  const wrap = detailEl.querySelector(`.rel-wrap[data-relidx="${relIdx}"]`);
+  if(!wrap) return;
+  wrap.innerHTML = `
+    <div class="rel-picker">
+      <input type="text" class="rel-picker-input" placeholder="Zoek op naam, of plak een URI of verkorte naam…" autocomplete="off">
+      <div class="rel-picker-list"></div>
+      <button type="button" class="rel-picker-cancel">Annuleren</button>
+    </div>`;
+  const input = wrap.querySelector('.rel-picker-input');
+  const list = wrap.querySelector('.rel-picker-list');
+  renderRelOptions('', list, relIdx);
+  input.addEventListener('input', () => { input.classList.remove('invalid'); renderRelOptions(input.value, list, relIdx); });
+  input.addEventListener('keydown', e => {
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      const q = input.value.trim();
+      if(!q) return;
+      const first = list.querySelector('.rel-option[data-uri]');
+      if(first){ commitRelation(relIdx, first.dataset.uri); return; }
+      const resolved = resolveTypedInput(q);
+      if(resolved) commitRelation(relIdx, resolved);
+      else input.classList.add('invalid');
+    } else if(e.key === 'Escape'){ renderDetail(); }
+  });
+  wrap.querySelector('.rel-picker-cancel').addEventListener('click', () => renderDetail());
+  input.focus();
+}
+
+function commitRelation(relIdx, newUri){
+  const info = currentEditableRels[relIdx];
+  if(!info) return;
+  const term = info.term;
+  const oldUri = term.value;
+  if(newUri !== oldUri){
+    removeIncoming(oldUri, info.predicateUri, info.subjectUri);
+    term.value = newUri;
+    term.type = (model.nodes[newUri] && model.nodes[newUri].isBnode) ? 'bnode' : 'uri';
+    addIncoming(newUri, info.predicateUri, info.subjectUri);
+    hasUnsavedChanges = true;
+    markValidationStale();
+    updateDownloadState();
+    updateStatus();
+  }
+  const detailEl = document.getElementById('detailEl');
+  lastScrollTop = detailEl ? detailEl.scrollTop : 0;
+  renderList();
+  renderDetail();
+}
+
+/* ================= mutaties ================= */
+
+function deleteTripleValue(subjectUri, predicateUri, term){
+  const idx = model.triples.findIndex(t => t.o === term);
+  if(idx >= 0) model.triples.splice(idx, 1);
+  const subjNode = model.nodes[subjectUri];
+  if(subjNode){
+    const oidx = subjNode.out.findIndex(e => e.o === term);
+    if(oidx >= 0) subjNode.out.splice(oidx, 1);
+    if(predicateUri === RDF+'type' && term.type === 'uri') subjNode.types.delete(term.value);
+  }
+  if(term.type === 'uri') removeIncoming(term.value, predicateUri, subjectUri);
+  hasUnsavedChanges = true;
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  renderApp();
+}
+
+function refreshResourceOptionsFor(u){
+  if(!allResourceOptions.some(o => o.uri === u)){
+    allResourceOptions.push({ uri:u, label:labelOf(u), curie:curieOf(u), searchText:(labelOf(u)+' '+curieOf(u)+' '+u).toLowerCase() });
+  }
+}
+
+// Zorgt dat een resource in het model bestaat, ook zonder triples (een blanco
+// node die je nog moet vullen).
+function ensureNode(uri){
+  if(!model.nodes[uri]){
+    model.nodes[uri] = { id:uri, isBnode: uri.indexOf('_:') === 0, out:[], in:[], types:new Set() };
+  }
+  return model.nodes[uri];
+}
+
+function addTripleValueRaw(subjectUri, predicateUri, objTerm){
+  const isBnodeSubject = subjectUri.indexOf('_:') === 0;
+  const subjTerm = isBnodeSubject ? { type:'bnode', value:subjectUri } : { type:'uri', value:subjectUri };
+  model.triples.push({ s:subjTerm, p:{ type:'uri', value:predicateUri }, o:objTerm });
+  let subjNode = ensureNode(subjectUri);
+  if(subjNode.isBnode !== isBnodeSubject){ subjNode.isBnode = isBnodeSubject; }
+  subjNode.out.push({ p:predicateUri, o:objTerm });
+  if(objTerm.type === 'uri' || objTerm.type === 'bnode'){
+    addIncoming(objTerm.value, predicateUri, subjectUri);
+    if(predicateUri === RDF+'type') subjNode.types.add(objTerm.value);
+  }
+  if(predicateUri !== RDF+'type' && !isCoreURI(predicateUri) && !(predicateUri in model.propKind)){
+    model.propKind[predicateUri] = objTerm.type === 'uri' ? 'relatie' : 'eigenschap';
+    model.properties.push(predicateUri);
+    model.properties.sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+    allPropertyOptions.push({ uri:predicateUri, label:labelOf(predicateUri), curie:curieOf(predicateUri), searchText:(labelOf(predicateUri)+' '+curieOf(predicateUri)+' '+predicateUri).toLowerCase() });
+  }
+  refreshResourceOptionsFor(subjectUri);
+  if(objTerm.type === 'uri') refreshResourceOptionsFor(objTerm.value);
+}
+
+function addTripleValue(subjectUri, predicateUri, objTerm){
+  addTripleValueRaw(subjectUri, predicateUri, objTerm);
+  hasUnsavedChanges = true;
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  selectedId = subjectUri;
+  const detailEl = document.getElementById('detailEl');
+  lastScrollTop = detailEl ? detailEl.scrollTop : 0;
+  renderApp();
+}
+
+// Een klasse die nog niet in het model bekend was meetellen — net als bij het
+// laden, waar klassen uit de gebruikte rdf:type-waarden worden afgeleid.
+function registerClass(classUri){
+  if(isCoreURI(classUri) || model.classes.includes(classUri)) return;
+  model.classes.push(classUri);
+  model.classes.sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+}
+
+function createResource(resourceUri, classUri, labelText, labelLang){
+  ensureNode(resourceUri);
+  if(labelText && labelText.trim()){
+    addTripleValueRaw(resourceUri, RDFS+'label', makeLabelTerm(labelText.trim(), labelLang));
+  }
+  if(classUri){
+    addTripleValueRaw(resourceUri, RDF+'type', { type:'uri', value:classUri });
+    registerClass(classUri);
+  }
+  if(!model.individuals.includes(resourceUri)) model.individuals.push(resourceUri);
+  model.individuals.sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+  hasUnsavedChanges = true;
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  kindFilter = 'individuals';
+  classFilter = '';
+  selectedId = resourceUri;
+  searchQuery = '';
+  renderApp();
+}
+
+function createClass(classUri, labelText, superUri, labelLang){
+  if(labelText && labelText.trim()){
+    addTripleValueRaw(classUri, RDFS+'label', makeLabelTerm(labelText.trim(), labelLang));
+  }
+  if(superUri) addTripleValueRaw(classUri, RDFS+'subClassOf', { type:'uri', value:superUri });
+  if(!model.classes.includes(classUri)){
+    addTripleValueRaw(classUri, RDF+'type', { type:'uri', value: OWL+'Class' });
+    model.classes.push(classUri);
+  }
+  model.classes.sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+  hasUnsavedChanges = true;
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  kindFilter = 'classes';
+  classFilter = '';
+  selectedId = classUri;
+  searchQuery = '';
+  renderApp();
+}
+
+function createProperty(propUri, labelText, kind, superUri, domainUri, rangeUri, labelLang){
+  if(labelText && labelText.trim()){
+    addTripleValueRaw(propUri, RDFS+'label', makeLabelTerm(labelText.trim(), labelLang));
+  }
+  addTripleValueRaw(propUri, RDF+'type', { type:'uri', value: kind === 'relatie' ? OWL+'ObjectProperty' : OWL+'DatatypeProperty' });
+  if(superUri) addTripleValueRaw(propUri, RDFS+'subPropertyOf', { type:'uri', value:superUri });
+  if(domainUri) addTripleValueRaw(propUri, RDFS+'domain', { type:'uri', value:domainUri });
+  if(rangeUri) addTripleValueRaw(propUri, RDFS+'range', { type:'uri', value:rangeUri });
+  model.propKind[propUri] = kind;
+  if(!model.properties.includes(propUri)){
+    model.properties.push(propUri);
+    model.properties.sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+    const lbl = labelOf(propUri), cur = curieOf(propUri);
+    allPropertyOptions.push({ uri:propUri, label:lbl, curie:cur, searchText:(lbl+' '+cur+' '+propUri).toLowerCase() });
+  }
+  hasUnsavedChanges = true;
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  kindFilter = kind === 'relatie' ? 'objectproperties' : 'dataproperties';
+  classFilter = '';
+  selectedId = propUri;
+  searchQuery = '';
+  renderApp();
+}
+
+function uriInUse(uri){
+  return model.classes.includes(uri) || model.properties.includes(uri) || model.individuals.includes(uri);
+}
+
+function deleteResource(uri){
+  model.triples = model.triples.filter(t => {
+    const involved = (t.s.type !== 'literal' && t.s.value === uri) || (t.o.type !== 'literal' && t.o.value === uri);
+    return !involved;
+  });
+  Object.keys(model.nodes).forEach(k => {
+    const n = model.nodes[k];
+    n.out = n.out.filter(e => !(e.o.type !== 'literal' && e.o.value === uri));
+    n.in = n.in.filter(e => !(e.s.type !== 'literal' && e.s.value === uri));
+  });
+  delete model.nodes[uri];
+  model.individuals = model.individuals.filter(u => u !== uri);
+  sessionBnodes.delete(uri);
+  model.classes = model.classes.filter(u => u !== uri);
+  model.properties = model.properties.filter(u => u !== uri);
+  delete model.propKind[uri];
+  allResourceOptions = allResourceOptions.filter(o => o.uri !== uri);
+  allPropertyOptions = allPropertyOptions.filter(o => o.uri !== uri);
+}
+
+/* ================= item aanmaken ================= */
+
+// Pop-up waarin je een nieuwe resource aanmaakt. Het soort (instantie, klasse,
+// eigenschap of relatie) kies je in de pop-up; een label is genoeg, de verkorte
+// naam wordt voorgesteld en het voorbeeld laat zien wat er wordt aangemaakt.
+let createKind = 'individuals';
+
+function openCreateItemModal(){
+  createKind = kindFilter;
+  renderCreateModal();
+  document.getElementById('createOverlay').style.display = 'flex';
+  const label = document.getElementById('crLabel');
+  if(label){ label.focus(); label.select(); }
+}
+
+function closeCreateModal(){
+  document.getElementById('createOverlay').style.display = 'none';
+}
+
+function createKindInfo(){
+  const noun = kindNoun(createKind);
+  return { kind: createKind, noun, Noun: noun.charAt(0).toUpperCase() + noun.slice(1), isInstance: createKind === 'individuals' };
+}
+
+// Wisselen van soort in de pop-up: alleen de velden tonen die daarbij horen.
+function applyCreateKind(){
+  const info = createKindInfo();
+  const body = document.getElementById('createModalBody');
+  body.querySelectorAll('.cr-instance-only').forEach(el => { el.style.display = info.isInstance ? '' : 'none'; });
+
+  const isProperty = info.kind === 'dataproperties' || info.kind === 'objectproperties';
+  const superRow = document.getElementById('crSuperRow');
+  if(superRow){
+    superRow.style.display = info.isInstance ? 'none' : '';
+    document.getElementById('crSuperLabel').textContent =
+      info.kind === 'classes' ? 'Superklasse (optioneel)'
+        : info.kind === 'dataproperties' ? 'Super-eigenschap (optioneel)'
+          : 'Super-relatie (optioneel)';
+    document.getElementById('crSuper').innerHTML = createSuperOptions();
+  }
+  const domainRow = document.getElementById('crDomainRow');
+  const rangeRow = document.getElementById('crRangeRow');
+  if(domainRow){
+    domainRow.style.display = isProperty ? '' : 'none';
+    document.getElementById('crDomain').innerHTML = createDomainOptions();
+  }
+  if(rangeRow){
+    rangeRow.style.display = isProperty ? '' : 'none';
+    document.getElementById('crRangeLabel').textContent =
+      info.kind === 'dataproperties' ? 'Bereik (datatype, optioneel)' : 'Bereik (klasse, optioneel)';
+    document.getElementById('crRange').innerHTML = createRangeOptions(info.kind);
+  }
+
+  const submit = document.getElementById('crSubmit');
+  if(submit) submit.textContent = info.Noun + ' aanmaken';
+  updateCreatePreview();
+}
+
+function renderCreateModal(){
+  const info = createKindInfo();
+  document.getElementById('createModalTitle').textContent = 'Nieuwe resource';
+  const body = document.getElementById('createModalBody');
+  const radio = (value, label) =>
+    `<label><input type="radio" name="crKind" value="${value}"${value === createKind ? ' checked' : ''}> ${label}</label>`;
+  body.innerHTML = `
+    <div class="add-prop-row">
+      <div class="add-prop-label">Soort</div>
+      <div class="add-prop-kind-row">
+        ${radio('individuals', 'Instantie')}
+        ${radio('classes', 'Klasse')}
+        ${radio('dataproperties', 'Eigenschap')}
+        ${radio('objectproperties', 'Relatie')}
+      </div>
+    </div>
+    <div class="add-prop-row">
+      <div class="add-prop-label">Label</div>
+      <div class="label-row">
+        <input type="text" id="crLabel" placeholder="Naam van de ${esc(info.noun)}" autocomplete="off">
+        <select id="crLabelLang" title="Taal van het label">${languageOptionsHtml()}</select>
+      </div>
+    </div>
+    <div class="add-prop-row cr-instance-only">
+      <div class="add-prop-label">Klasse (optioneel)</div>
+      <select id="crClass">${createClassOptions()}</select>
+      <input type="text" id="crClassCustom" style="display:none;margin-top:6px" placeholder="bv. ex:MijnKlasse of https://…/Klasse" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="add-prop-row" id="crSuperRow" style="display:none">
+      <div class="add-prop-label" id="crSuperLabel">Superklasse (optioneel)</div>
+      <select id="crSuper"></select>
+    </div>
+    <div class="add-prop-row" id="crDomainRow" style="display:none">
+      <div class="add-prop-label">Domein (optioneel)</div>
+      <select id="crDomain"></select>
+    </div>
+    <div class="add-prop-row" id="crRangeRow" style="display:none">
+      <div class="add-prop-label" id="crRangeLabel">Bereik (optioneel)</div>
+      <select id="crRange"></select>
+    </div>
+    <div class="add-prop-row cr-instance-only">
+      <label class="create-bnode-toggle"><input type="checkbox" id="crBnode"> Blanco node (bnode) — zonder URI</label>
+    </div>
+    <div class="add-prop-row" id="crUriRow">
+      <div class="add-prop-label">Verkorte naam / URI</div>
+      <input type="text" id="crUri" placeholder="bv. ex:mijn-${esc(info.noun)}" autocomplete="off" spellcheck="false">
+      <div class="create-uri-preview" id="crUriPreview"></div>
+    </div>
+    <div class="create-preview" id="crPreview"></div>
+    <div class="add-prop-error" id="crError"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn primary" id="crSubmit">${esc(info.Noun)} aanmaken</button>
+      <button type="button" class="rel-picker-cancel" id="crCancel">Annuleren</button>
+    </div>`;
+
+  const labelInput = body.querySelector('#crLabel');
+  const uriInput = body.querySelector('#crUri');
+  const bnode = body.querySelector('#crBnode');
+  const classSel = body.querySelector('#crClass');
+
+  body.querySelectorAll('input[name="crKind"]').forEach(r => {
+    r.addEventListener('change', () => { createKind = r.value; applyCreateKind(); });
+  });
+  labelInput.addEventListener('input', () => {
+    if(!uriInput.dataset.touched) uriInput.value = suggestCurieFromLabel(labelInput.value);
+    updateCreatePreview();
+  });
+  const labelLangSel = body.querySelector('#crLabelLang');
+  if(labelLangSel) labelLangSel.addEventListener('change', updateCreatePreview);
+  uriInput.addEventListener('input', () => { uriInput.dataset.touched = '1'; updateCreatePreview(); });
+  const classCustom = body.querySelector('#crClassCustom');
+  if(classSel) classSel.addEventListener('change', () => {
+    const isCustom = classSel.value === '__custom';
+    classCustom.style.display = isCustom ? '' : 'none';
+    if(isCustom) classCustom.focus();
+    updateCreatePreview();
+  });
+  if(classCustom) classCustom.addEventListener('input', updateCreatePreview);
+  if(bnode) bnode.addEventListener('change', () => {
+    body.querySelector('#crUriRow').style.display = bnode.checked ? 'none' : '';
+    uriInput.disabled = bnode.checked;
+    if(bnode.checked){ uriInput.value = ''; uriInput.dataset.touched = '1'; }
+    updateCreatePreview();
+  });
+  ['crSuper', 'crDomain', 'crRange'].forEach(id => {
+    const el = body.querySelector('#' + id);
+    if(el) el.addEventListener('change', updateCreatePreview);
+  });
+  body.querySelector('#crCancel').addEventListener('click', closeCreateModal);
+  body.querySelector('#crSubmit').addEventListener('click', submitCreate);
+  applyCreateKind();
+}
+
+function createUriInput(){
+  const raw = document.getElementById('crUri').value.trim();
+  if(!raw) return null;
+  return resolveTypedInput(raw) || (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw) ? raw : null);
+}
+
+// Resources uit de geselecteerde SHACL-bestanden: klassen (sh:targetClass,
+// sh:class en gedeclareerde klassen) en eigenschappen (sh:path,
+// sh:targetSubjectsOf/-ObjectsOf en gedeclareerde eigenschappen).
+function shapeResources(){
+  const classes = new Set();
+  const properties = new Set();
+  const g = shapes && shapes.graph;
+  if(g){
+    shapes.shapeIds.forEach(id => {
+      g.out(id, SHACL.SH+'targetClass').forEach(t => { if(t.type === 'uri') classes.add(t.value); });
+      g.out(id, SHACL.SH+'class').forEach(t => { if(t.type === 'uri') classes.add(t.value); });
+      const path = g.first(id, SHACL.SH+'path');
+      if(path && path.type === 'uri') properties.add(path.value);
+      g.out(id, SHACL.SH+'targetSubjectsOf').forEach(t => { if(t.type === 'uri') properties.add(t.value); });
+      g.out(id, SHACL.SH+'targetObjectsOf').forEach(t => { if(t.type === 'uri') properties.add(t.value); });
+    });
+    g.byS.forEach((m, subj) => {
+      (m.get(RDF+'type') || []).forEach(t => {
+        if(t.value === OWL+'Class' || t.value === RDFS+'Class') classes.add(subj);
+        if(t.value === OWL+'ObjectProperty' || t.value === OWL+'DatatypeProperty' || t.value === RDF+'Property') properties.add(subj);
+      });
+    });
+  }
+  return { classes, properties };
+}
+
+// Beschikbare klassen/eigenschappen: die uit het model plus die uit de
+// geselecteerde SHACL-bestanden.
+function availableClasses(){
+  const set = new Set(model.classes);
+  shapeResources().classes.forEach(u => set.add(u));
+  return [...set].sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+}
+
+function availableProperties(){
+  const set = new Set(model.properties);
+  shapeResources().properties.forEach(u => set.add(u));
+  return [...set].sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+}
+
+function selectOptions(uris, emptyLabel){
+  const opts = [`<option value="">${esc(emptyLabel)}</option>`];
+  uris.forEach(u => opts.push(`<option value="${esc(u)}">${esc(rawLabelOf(u))}</option>`));
+  return opts.join('');
+}
+
+function createClassOptions(){
+  const opts = ['<option value="">— geen klasse —</option>'];
+  availableClasses().forEach(u => opts.push(`<option value="${esc(u)}">${esc(rawLabelOf(u))}</option>`));
+  opts.push('<option value="__custom">Eigen URI of verkorte naam…</option>');
+  return opts.join('');
+}
+
+function createSuperOptions(){
+  const info = createKindInfo();
+  const uris = info.kind === 'classes' ? availableClasses() : availableProperties();
+  return selectOptions(uris, '— geen —');
+}
+
+function createSuperValue(){
+  const sel = document.getElementById('crSuper');
+  return sel && sel.value ? sel.value : null;
+}
+
+// Veelgebruikte datatypes voor het bereik van een eigenschap.
+const DATATYPE_OPTIONS = [
+  [XSD+'string', 'xsd:string'],
+  [XSD+'integer', 'xsd:integer'],
+  [XSD+'decimal', 'xsd:decimal'],
+  [XSD+'double', 'xsd:double'],
+  [XSD+'boolean', 'xsd:boolean'],
+  [XSD+'date', 'xsd:date'],
+  [XSD+'dateTime', 'xsd:dateTime'],
+  [XSD+'time', 'xsd:time'],
+  [XSD+'gYear', 'xsd:gYear'],
+  [XSD+'duration', 'xsd:duration'],
+  [XSD+'anyURI', 'xsd:anyURI'],
+  [XSD+'language', 'xsd:language'],
+  [RDF+'langString', 'rdf:langString']
+];
+
+function createDomainOptions(){
+  return selectOptions(availableClasses(), '— geen —');
+}
+
+// Bij een eigenschap is het bereik doorgaans een datatype; bij een relatie een klasse.
+function createRangeOptions(kind){
+  if(kind !== 'dataproperties') return selectOptions(availableClasses(), '— geen —');
+  const opts = ['<option value="">— geen —</option>'];
+  DATATYPE_OPTIONS.forEach(([uri, label]) => opts.push(`<option value="${esc(uri)}">${esc(label)}</option>`));
+  return opts.join('');
+}
+
+function selectedValue(id){
+  const el = document.getElementById(id);
+  return el && el.value ? el.value : null;
+}
+
+// Veelgebruikte talen voor tekstwaarden en labels.
+const LANGUAGE_OPTIONS = [
+  ['', 'geen taal'], ['nl', '@nl'], ['en', '@en'], ['de', '@de'], ['fr', '@fr'],
+  ['es', '@es'], ['it', '@it'], ['pt', '@pt'], ['fy', '@fy']
+];
+
+function languageOptionsHtml(){
+  return LANGUAGE_OPTIONS.map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join('');
+}
+
+function makeLabelTerm(text, lang){
+  return lang ? { type:'literal', value:text, lang } : { type:'literal', value:text, datatype:XSD+'string' };
+}
+
+// Keuzes voor het type literal bij het toevoegen van een eigenschap.
+const LITERAL_TYPE_OPTIONS = [
+  [XSD+'string', 'Tekst (xsd:string)'],
+  [RDF+'langString', 'Tekst met taal (rdf:langString)'],
+  [XSD+'integer', 'Geheel getal (xsd:integer)'],
+  [XSD+'decimal', 'Decimaal (xsd:decimal)'],
+  [XSD+'double', 'Kommagetal (xsd:double)'],
+  [XSD+'boolean', 'Boolean (xsd:boolean)'],
+  [XSD+'date', 'Datum (xsd:date)'],
+  [XSD+'dateTime', 'Datum en tijd (xsd:dateTime)'],
+  [XSD+'time', 'Tijd (xsd:time)'],
+  [XSD+'gYear', 'Jaar (xsd:gYear)'],
+  [XSD+'duration', 'Duur (xsd:duration)'],
+  [XSD+'anyURI', 'URI (xsd:anyURI)'],
+  [XSD+'language', 'Taalcode (xsd:language)']
+];
+
+function literalTypeOptionsHtml(){
+  const opts = LITERAL_TYPE_OPTIONS.map(([uri, label]) => `<option value="${esc(uri)}">${esc(label)}</option>`);
+  opts.push('<option value="__custom">Eigen datatype…</option>');
+  return opts.join('');
+}
+
+// Datatypes die de shapes voorschrijven staan niet altijd in de standaardlijst
+// (bv. xsd:gYearMonth); zet ze er dan alsnog in, vóór "Eigen datatype…".
+function ensureDtOption(select, datatype){
+  if(!select || !datatype) return;
+  if([...select.options].some(o => o.value === datatype)) return;
+  const opt = document.createElement('option');
+  opt.value = datatype;
+  opt.textContent = curieOf(datatype);
+  select.insertBefore(opt, select.querySelector('option[value="__custom"]'));
+}
+
+function datatypePlaceholder(datatype){
+  const placeholders = {
+    [XSD+'integer']: 'bv. 42',
+    [XSD+'decimal']: 'bv. 3.14',
+    [XSD+'double']: 'bv. 3.14',
+    [XSD+'boolean']: 'true of false',
+    [XSD+'date']: 'bv. 2026-10-20',
+    [XSD+'dateTime']: 'bv. 2026-10-20T14:30:00',
+    [XSD+'time']: 'bv. 14:30:00',
+    [XSD+'gYear']: 'bv. 2026',
+    [XSD+'gYearMonth']: 'bv. 2026-10',
+    [XSD+'duration']: 'bv. P1Y2M3D',
+    [XSD+'anyURI']: 'bv. https://voorbeeld.nl/id/1',
+    [XSD+'language']: 'bv. nl'
+  };
+  return placeholders[datatype] || 'Waarde';
+}
+
+// Lichte controle op de lexicale vorm, zodat er geen ongeldige literal ontstaat.
+function literalValueError(datatype, value){
+  const v = value.trim();
+  const checks = {
+    [XSD+'integer']: [/^-?\d+$/, 'Vul een geheel getal in.'],
+    [XSD+'decimal']: [/^-?\d+(\.\d+)?$/, 'Vul een decimaal getal in.'],
+    [XSD+'double']: [/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/, 'Vul een getal in.'],
+    [XSD+'boolean']: [/^(true|false|1|0)$/i, 'Gebruik true/false (of 1/0).'],
+    [XSD+'date']: [/^\d{4}-\d{2}-\d{2}$/, 'Gebruik een datum als JJJJ-MM-DD.'],
+    [XSD+'dateTime']: [/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/, 'Gebruik een datum en tijd als JJJJ-MM-DDThh:mm:ss.'],
+    [XSD+'time']: [/^\d{2}:\d{2}:\d{2}(\.\d+)?$/, 'Gebruik een tijd als hh:mm:ss.'],
+    [XSD+'gYear']: [/^-?\d{4}$/, 'Gebruik een jaartal als JJJJ.'],
+    [XSD+'gYearMonth']: [/^-?\d{4}-\d{2}$/, 'Gebruik een jaar en maand als JJJJ-MM.'],
+    [XSD+'duration']: [/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+S)?)?$/, 'Gebruik een duur als P1Y2M3D of PT4H.'],
+    [XSD+'language']: [/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, 'Gebruik een taalcode als nl of en-GB.']
+  };
+  const check = checks[datatype];
+  if(check && !check[0].test(v)) return check[1];
+  return null;
+}
+
+// De klasse-URI: uit de keuzelijst, of uit het vrije invoerveld.
+function createClassValue(){
+  const sel = document.getElementById('crClass');
+  if(!sel || !sel.value) return null;
+  if(sel.value !== '__custom') return sel.value;
+  const inp = document.getElementById('crClassCustom');
+  const raw = inp ? inp.value.trim() : '';
+  if(!raw) return null;
+  return resolveTypedInput(raw) || (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw) ? raw : null);
+}
+
+// Laat live zien welke URI en welke triples er worden aangemaakt.
+function updateCreatePreview(){
+  const info = createKindInfo();
+  const uriPreview = document.getElementById('crUriPreview');
+  const preview = document.getElementById('crPreview');
+  const label = document.getElementById('crLabel').value.trim();
+  const labelLang = selectedValue('crLabelLang');
+  const bnode = document.getElementById('crBnode');
+  const isBnode = Boolean(bnode && bnode.checked);
+  const raw = document.getElementById('crUri').value.trim();
+  const resolved = createUriInput();
+
+  if(isBnode){ uriPreview.textContent = ''; uriPreview.className = 'create-uri-preview'; }
+  else if(!raw){ uriPreview.textContent = ''; uriPreview.className = 'create-uri-preview'; }
+  else if(resolved){ uriPreview.textContent = resolved; uriPreview.className = 'create-uri-preview'; }
+  else { uriPreview.textContent = 'Onbekende prefix of ongeldige URI'; uriPreview.className = 'create-uri-preview invalid'; }
+
+  const subject = isBnode ? '[]' : (resolved ? uriToTurtle(resolved) : null);
+  if(!subject){
+    preview.innerHTML = '<span class="cp-empty">Vul een label of verkorte naam in om te zien wat er wordt aangemaakt.</span>';
+    return;
+  }
+  const parts = [];
+  const sup = info.isInstance ? null : selectedValue('crSuper');
+  const dom = info.isInstance ? null : selectedValue('crDomain');
+  const rng = info.isInstance ? null : selectedValue('crRange');
+  if(info.kind === 'classes'){
+    parts.push('a owl:Class');
+    if(sup) parts.push('rdfs:subClassOf ' + uriToTurtle(sup));
+  } else if(info.kind === 'dataproperties'){
+    parts.push('a owl:DatatypeProperty');
+    if(sup) parts.push('rdfs:subPropertyOf ' + uriToTurtle(sup));
+    if(dom) parts.push('rdfs:domain ' + uriToTurtle(dom));
+    if(rng) parts.push('rdfs:range ' + uriToTurtle(rng));
+  } else if(info.kind === 'objectproperties'){
+    parts.push('a owl:ObjectProperty');
+    if(sup) parts.push('rdfs:subPropertyOf ' + uriToTurtle(sup));
+    if(dom) parts.push('rdfs:domain ' + uriToTurtle(dom));
+    if(rng) parts.push('rdfs:range ' + uriToTurtle(rng));
+  } else {
+    const cls = createClassValue();
+    if(cls) parts.push('a ' + uriToTurtle(cls));
+  }
+  if(label) parts.push('rdfs:label "' + label.replace(/"/g, '\\"') + '"' + (labelLang ? '@' + labelLang : ''));
+  preview.textContent = subject + (parts.length ? ' ' + parts.join(' ; ') : '') + ' .';
+}
+
+function submitCreate(){
+  const info = createKindInfo();
+  const errorEl = document.getElementById('crError');
+  errorEl.textContent = '';
+  const label = document.getElementById('crLabel').value.trim();
+  const labelLang = selectedValue('crLabelLang');
+  const bnode = document.getElementById('crBnode');
+  const classSel = document.getElementById('crClass');
+  if(info.isInstance && classSel && classSel.value === '__custom'){
+    const raw = document.getElementById('crClassCustom').value.trim();
+    if(!raw){ errorEl.textContent = 'Vul een klasse-URI of verkorte naam in, of kies een klasse uit de lijst.'; return; }
+    if(!createClassValue()){ errorEl.textContent = 'Onbekende prefix of ongeldige klasse-URI.'; return; }
+  }
+  const classUri = info.isInstance ? createClassValue() : null;
+
+  // Een blanco node mag leeg blijven: je vult hem daarna aan met eigenschappen.
+  const isBnode = info.isInstance && bnode && bnode.checked;
+
+  // Zonder label of klasse zou er geen enkele triple over de resource ontstaan
+  // en dus ook geen item in de lijst; vraag dan eerst om een label of klasse.
+  if(info.isInstance && !label && !classUri && !isBnode){
+    errorEl.textContent = 'Vul een label in of kies een klasse.';
+    return;
+  }
+
+  if(isBnode){
+    const bnodeId = nextBnodeId();
+    if(!label && !classUri) sessionBnodes.add(bnodeId);
+    closeCreateModal();
+    createResource(bnodeId, classUri, label, labelLang);
+    return;
+  }
+  const resolved = createUriInput();
+  if(!resolved){ errorEl.textContent = 'Vul een geldige verkorte naam of URI in.'; return; }
+  if(uriInUse(resolved)){ errorEl.textContent = 'Deze URI wordt al gebruikt.'; return; }
+  const superUri = info.isInstance ? null : selectedValue('crSuper');
+  const domainUri = info.isInstance ? null : selectedValue('crDomain');
+  const rangeUri = info.isInstance ? null : selectedValue('crRange');
+  closeCreateModal();
+  if(info.kind === 'individuals') createResource(resolved, classUri, label, labelLang);
+  else if(info.kind === 'classes') createClass(resolved, label, superUri, labelLang);
+  else createProperty(resolved, label, info.kind === 'objectproperties' ? 'relatie' : 'eigenschap', superUri, domainUri, rangeUri, labelLang);
+}
+
+function nextBnodeId(){
+  let n = 0;
+  while(model.nodes['_:b' + n]) n++;
+  return '_:b' + n;
+}
+
+function renderOptionList(listEl, options, query, onPick, prioritySet, initialOptions){
+  const q = query.trim().toLowerCase();
+  let finalList;
+  let hint = '';
+  if(!q){
+    if(!initialOptions || !initialOptions.length){
+      listEl.innerHTML = '<div class="rel-option-empty">Begin met typen om te zoeken, of plak een volledige URI of verkorte naam.</div>';
+      return;
+    }
+    finalList = initialOptions;
+    hint = '<div class="rel-option-empty">Eigenschappen voor deze klasse:</div>';
+  } else {
+    const matches = [];
+    const rest = [];
+    for(const opt of options){
+      if(opt.searchText.indexOf(q) === -1) continue;
+      if(prioritySet && prioritySet.has(opt.uri)) matches.push(opt);
+      else rest.push(opt);
+    }
+    finalList = matches.concat(rest).slice(0, 8);
+    if(!finalList.length){ listEl.innerHTML = '<div class="rel-option-empty">Geen overeenkomsten. Plak een volledige URI of verkorte naam om een nieuwe waarde te gebruiken.</div>'; return; }
+  }
+  listEl.innerHTML = hint + finalList.map(o => `<div class="rel-option" data-uri="${esc(o.uri)}"><span class="label">${esc(o.label)}</span><span class="sub">${esc(o.curie)}</span></div>`).join('');
+  listEl.querySelectorAll('.rel-option').forEach(el => {
+    el.addEventListener('mousedown', ev => { ev.preventDefault(); onPick(el.dataset.uri); });
+  });
+}
+
+/* ================= eigenschap toevoegen (met verplichte suggesties) ================= */
+
+function openAddPropertyForm(subjectUri, prefillPredUri){
+  const detailEl = document.getElementById('detailEl');
+  const btn = detailEl.querySelector('#addPropBtn');
+  if(!btn) return;
+
+  const required = requiredMissingFor(subjectUri);
+  const requiredUris = new Set(required.map(r => r.path));
+
+  const wrap = document.createElement('div');
+  wrap.className = 'add-prop-form';
+  wrap.innerHTML = `
+    ${required.length ? `<div class="suggest-block">
+      <div class="suggest-label">Verplichte eigenschappen die nog ontbreken</div>
+      <div class="suggest-row">${required.map(r =>
+        `<button type="button" class="suggest-chip" data-path="${esc(r.path)}">${esc(rawLabelOf(r.path))}<span class="req">verplicht</span></button>`
+      ).join('')}</div>
+    </div>` : ''}
+    <div class="add-prop-row">
+      <div class="add-prop-label">Eigenschap / relatie</div>
+      <input type="text" class="add-prop-pred-input" placeholder="Zoek op naam, of plak verkorte naam/URI…" autocomplete="off">
+      <div class="rel-picker-list add-prop-pred-list"></div>
+    </div>
+    <div class="add-prop-row add-prop-kind-row">
+      <label><input type="radio" name="addPropKind" value="literal" checked> Vaste waarde</label>
+      <label><input type="radio" name="addPropKind" value="relatie"> Verwijzing naar resource</label>
+      <label><input type="radio" name="addPropKind" value="bnode"> Nieuwe blanco node</label>
+    </div>
+    <div class="add-prop-row add-prop-value-area"></div>
+    <div class="add-prop-error"></div>
+    <div class="add-prop-actions">
+      <button type="button" class="btn primary add-prop-submit">Toevoegen</button>
+      <button type="button" class="rel-picker-cancel add-prop-cancel">Annuleren</button>
+    </div>`;
+  btn.replaceWith(wrap);
+
+  const predInput = wrap.querySelector('.add-prop-pred-input');
+  const predList = wrap.querySelector('.add-prop-pred-list');
+  const valueArea = wrap.querySelector('.add-prop-value-area');
+  const errorEl = wrap.querySelector('.add-prop-error');
+  let chosenPredUri = null;
+  let chosenTargetUri = null;
+  let expectedDts = [];       // datatype(s) die de shapes voorschrijven
+  let dtTouched = false;      // heeft de gebruiker het datatype zelf gekozen?
+  let refreshDatatypeUi = () => {};
+
+  // Keuzelijst: de eigenschappen/relaties die de shapes bij deze klasse
+  // voorschrijven, aangevuld met wat al in het model voorkomt.
+  const predOptions = propertyOptionsFor(subjectUri);
+  // Alle datatypes die de shapes bij deze eigenschap toestaan. Bij sh:or kunnen
+  // dat er meer zijn, bijvoorbeeld xsd:date of xsd:gYearMonth.
+  function expectedDtsFor(u){
+    return predOptions.fromShapes
+      .filter(o => o.uri === u && o.expected && o.expected.kind === 'literal')
+      .reduce((acc, o) => {
+        (o.expected.datatypes || (o.expected.datatype ? [o.expected.datatype] : [])).forEach(dt => {
+          if(acc.indexOf(dt) === -1) acc.push(dt);
+        });
+        return acc;
+      }, []);
+  }
+  // De sh:defaultValue die de shapes bij deze eigenschap noemen.
+  function defaultValueFor(u){
+    const o = predOptions.fromShapes.find(x => x.uri === u && x.defaultValue);
+    return o ? o.defaultValue : null;
+  }
+  function pickPredicate(u){
+    chosenPredUri = u;
+    predInput.value = rawLabelOf(u);
+    predList.innerHTML = '';
+    setExpectedDt(u);
+  }
+  predInput.addEventListener('input', () => {
+    chosenPredUri = null;
+    renderOptionList(predList, predOptions.all, predInput.value, pickPredicate, requiredUris, predOptions.fromShapes);
+  });
+  renderOptionList(predList, predOptions.all, '', pickPredicate, requiredUris, predOptions.fromShapes);
+
+  function setKind(kindVal){
+    wrap.querySelectorAll('input[name="addPropKind"]').forEach(r => { r.checked = r.value === kindVal; });
+    renderValueArea(kindVal);
+  }
+
+  function renderValueArea(kindVal){
+    if(kindVal === 'literal'){
+      valueArea.innerHTML = `
+        <div class="add-prop-label">Type waarde</div>
+        <select class="add-prop-datatype">${literalTypeOptionsHtml()}</select>
+        <div class="add-prop-value-row">
+          <input type="text" class="add-prop-literal-input" placeholder="Waarde">
+          <input type="text" class="add-prop-lang-input" placeholder="taal (optioneel)" title="Taal van de tekst, bv. nl" spellcheck="false">
+        </div>
+        <input type="text" class="add-prop-custom-dt" placeholder="eigen datatype, bv. ex:MijnType" style="display:none">`;
+      const dtSel = valueArea.querySelector('.add-prop-datatype');
+      const langInput = valueArea.querySelector('.add-prop-lang-input');
+      const customDt = valueArea.querySelector('.add-prop-custom-dt');
+      const valueInput = valueArea.querySelector('.add-prop-literal-input');
+
+      // Het taalveld is direct beschikbaar bij tekstwaarden, behalve wanneer de
+      // shapes een ander datatype voorschrijven: een taal-tag zou daar een
+      // rdf:langString van maken en de validatie laten falen.
+      const applyDatatypeUi = () => {
+        expectedDts.forEach(dt => ensureDtOption(dtSel, dt));
+        if(expectedDts.length && !dtTouched) dtSel.value = expectedDts[0];
+        const dtVal = dtSel.value;
+        const isText = dtVal === XSD+'string' || dtVal === RDF+'langString';
+        const isCustom = dtVal === '__custom';
+        const langBlocked = expectedDts.length > 0 && expectedDts.indexOf(RDF+'langString') === -1;
+        langInput.style.display = isText ? '' : 'none';
+        langInput.disabled = !!langBlocked;
+        if(langBlocked){
+          langInput.value = '';
+          langInput.placeholder = 'geen taal';
+          langInput.title = 'De shape verwacht ' + expectedDts.map(curieOf).join(' of ') + '; een taal-tag is hier niet toegestaan';
+        } else {
+          langInput.placeholder = dtVal === RDF+'langString' ? 'taal (bv. nl)' : 'taal (optioneel)';
+          langInput.title = 'Taal van de tekst, bv. nl';
+        }
+        customDt.style.display = isCustom ? '' : 'none';
+        valueInput.placeholder = (isText || isCustom) ? 'Waarde' : datatypePlaceholder(dtVal);
+      };
+      refreshDatatypeUi = applyDatatypeUi;
+      dtSel.addEventListener('change', () => { dtTouched = true; applyDatatypeUi(); });
+      applyDatatypeUi();
+      // Bij het wisselen van soort het ingevulde default weer terugzetten.
+      applyDefaultValue(chosenPredUri);
+    } else if(kindVal === 'bnode'){
+      valueArea.innerHTML = '<div class="rel-option-empty">Er wordt een nieuwe blanco node als waarde aangemaakt. Je gaat daar direct naartoe om er eigenschappen aan toe te voegen.</div>';
+    } else {
+      chosenTargetUri = null;
+      valueArea.innerHTML = `
+        <input type="text" class="add-prop-target-input" placeholder="Zoek op naam, of plak URI of verkorte naam…" autocomplete="off">
+        <div class="rel-picker-list add-prop-target-list"></div>`;
+      const targetInput = valueArea.querySelector('.add-prop-target-input');
+      const targetList = valueArea.querySelector('.add-prop-target-list');
+      targetInput.addEventListener('input', () => {
+        chosenTargetUri = null;
+        renderOptionList(targetList, allResourceOptions, targetInput.value, (u) => {
+          chosenTargetUri = u;
+          targetInput.value = labelOf(u);
+          targetList.innerHTML = '';
+        });
+      });
+    }
+  }
+  renderValueArea('literal');
+  wrap.querySelectorAll('input[name="addPropKind"]').forEach(r => {
+    r.addEventListener('change', () => renderValueArea(r.value));
+  });
+
+  function setExpectedDt(path){
+    expectedDts = expectedDtsFor(path);
+    dtTouched = false;
+    refreshDatatypeUi();
+    applyDefaultValue(path);
+  }
+
+  // De sh:defaultValue uit de shape: die waarde vullen we vast in, zodat een
+  // nieuwe eigenschap meteen de voorgeschreven beginwaarde heeft (bv. false bij
+  // een boolean). Alleen literals; een IRI-default laten we leeg.
+  function applyDefaultValue(u){
+    const dv = defaultValueFor(u);
+    const valInput = wrap.querySelector('.add-prop-literal-input');
+    if(!dv || dv.type !== 'literal' || !valInput) return;
+    const dtSel = wrap.querySelector('.add-prop-datatype');
+    const dt = dv.lang ? RDF+'langString' : dv.datatype;
+    if(dt){
+      ensureDtOption(dtSel, dt);
+      dtSel.value = dt;
+      dtTouched = true;
+    }
+    if(dv.lang){
+      const langInput = wrap.querySelector('.add-prop-lang-input');
+      if(langInput) langInput.value = dv.lang;
+    }
+    valInput.value = dv.value;
+    refreshDatatypeUi();
+  }
+
+  // Suggesties: klik vult de eigenschap (en de verwachte soort) in.
+  wrap.querySelectorAll('.suggest-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const path = chip.dataset.path;
+      const req = required.find(r => r.path === path);
+      chosenPredUri = path;
+      predInput.value = labelOf(path);
+      predList.innerHTML = '';
+      const kind = preferredKind(req && req.expected);
+      setKind(kind);
+      setExpectedDt(path);
+      errorEl.textContent = req ? 'Verwacht: ' + expectedHint(req.expected) : '';
+      const valInput = wrap.querySelector(kind === 'literal' ? '.add-prop-literal-input' : '.add-prop-target-input');
+      if(valInput) valInput.focus();
+    });
+  });
+
+  // Voorgevulde eigenschap (bv. vanuit een ontbrekend-verplicht-rij)
+  function prefill(uri){
+    if(!uri) return;
+    chosenPredUri = uri;
+    predInput.value = labelOf(uri);
+    const req = required.find(r => r.path === uri);
+    if(req) setKind(preferredKind(req.expected));
+    setExpectedDt(uri);
+    errorEl.textContent = req ? 'Verwacht: ' + expectedHint(req.expected) : '';
+  }
+  prefill(prefillPredUri);
+
+  wrap.querySelector('.add-prop-cancel').addEventListener('click', () => renderDetail());
+
+  wrap.querySelector('.add-prop-submit').addEventListener('click', () => {
+    errorEl.textContent = '';
+    const predUri = chosenPredUri || resolveTypedInput(predInput.value);
+    if(!predUri){ errorEl.textContent = 'Kies een bestaande eigenschap/relatie, of plak een geldige verkorte naam of URI.'; return; }
+    const kindVal = wrap.querySelector('input[name="addPropKind"]:checked').value;
+    if(kindVal === 'literal'){
+      const val = wrap.querySelector('.add-prop-literal-input').value;
+      if(!val.trim()){ errorEl.textContent = 'Vul een waarde in.'; return; }
+      const dtSel = wrap.querySelector('.add-prop-datatype');
+      const dtVal = dtSel ? dtSel.value : XSD+'string';
+      const langInput = wrap.querySelector('.add-prop-lang-input');
+      const lang = langInput ? langInput.value.trim() : '';
+      let term;
+      if(dtVal === '__custom'){
+        const raw = wrap.querySelector('.add-prop-custom-dt').value.trim();
+        const dt = raw ? (resolveTypedInput(raw) || (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw) ? raw : null)) : null;
+        if(!dt){ errorEl.textContent = 'Vul een geldige datatype-URI of verkorte naam in.'; return; }
+        term = { type:'literal', value:val, datatype: dt };
+      } else if(dtVal === RDF+'langString'){
+        if(!lang){ errorEl.textContent = 'Vul een taal in (bv. nl).'; return; }
+        term = { type:'literal', value:val, lang };
+      } else {
+        const msg = literalValueError(dtVal, val);
+        if(msg){ errorEl.textContent = msg; return; }
+        term = (dtVal === XSD+'string' && lang)
+          ? { type:'literal', value:val, lang }
+          : { type:'literal', value:val, datatype: dtVal };
+      }
+      addTripleValue(subjectUri, predUri, term);
+    } else if(kindVal === 'bnode'){
+      const bnodeId = nextBnodeId();
+      sessionBnodes.add(bnodeId);
+      addTripleValue(subjectUri, predUri, { type:'bnode', value: bnodeId });
+      // Direct doorgaan met het bewerken van de nieuwe blanco node.
+      selectedId = bnodeId;
+      renderApp();
+      openAddPropertyForm(bnodeId);
+    } else {
+      const targetInput = wrap.querySelector('.add-prop-target-input');
+      const targetUri = chosenTargetUri || resolveTypedInput(targetInput ? targetInput.value : '');
+      if(!targetUri){ errorEl.textContent = 'Kies een bestaande resource, of plak een geldige URI of verkorte naam.'; return; }
+      const targetNode = model.nodes[targetUri];
+      addTripleValue(subjectUri, predUri, (targetNode && targetNode.isBnode) ? { type:'bnode', value:targetUri } : { type:'uri', value:targetUri });
+    }
+  });
+
+  predInput.focus();
+}
+
+/* ================= prefixen ================= */
+
+function rebuildOptions(){
+  allResourceOptions = Object.keys(model.nodes).map(u => ({ uri:u, label:labelOf(u), curie:curieOf(u), searchText:(labelOf(u)+' '+curieOf(u)+' '+u).toLowerCase() }));
+  allPropertyOptions = model.properties.map(u => ({ uri:u, label:labelOf(u), curie:curieOf(u), searchText:(labelOf(u)+' '+curieOf(u)+' '+u).toLowerCase() }));
+}
+
+function openPrefixManager(){
+  if(!model) return;
+  prefixWorking = Object.keys(model.prefixes).map(p => ({ name:p, ns:model.prefixes[p] }));
+  renderPrefixRows();
+  document.getElementById('prefixOverlay').style.display = 'flex';
+  document.getElementById('prefixError').textContent = '';
+  document.getElementById('prefixHint').textContent = '';
+}
+
+function renderPrefixRows(){
+  const listEl = document.getElementById('prefixList');
+  listEl.innerHTML = prefixWorking.map((r,i) => `
+    <div class="prefix-row">
+      <input type="radio" name="prefixDefault" data-idx="${i}" title="Standaardprefix voor nieuwe resources" ${r.name === defaultPrefixName ? 'checked' : ''}>
+      <input type="text" class="prefix-name" data-idx="${i}" placeholder="prefix" value="${esc(r.name)}" spellcheck="false">
+      <input type="text" class="prefix-ns" data-idx="${i}" placeholder="https://…/namespace#" value="${esc(r.ns)}" spellcheck="false">
+      <button type="button" class="val-delete-btn" data-idx="${i}" title="Verwijder deze prefix">×</button>
+    </div>`).join('');
+  listEl.querySelectorAll('input[name="prefixDefault"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      defaultPrefixName = prefixWorking[parseInt(radio.dataset.idx, 10)].name.trim();
+    });
+  });
+  listEl.querySelectorAll('.prefix-name').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const idx = parseInt(inp.dataset.idx, 10);
+      const wasDefault = prefixWorking[idx].name === defaultPrefixName;
+      prefixWorking[idx].name = inp.value;
+      if(wasDefault) defaultPrefixName = inp.value.trim();
+    });
+  });
+  listEl.querySelectorAll('.prefix-ns').forEach(inp => {
+    inp.addEventListener('input', () => { prefixWorking[parseInt(inp.dataset.idx,10)].ns = inp.value; });
+  });
+  listEl.querySelectorAll('.val-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => { prefixWorking.splice(parseInt(btn.dataset.idx,10), 1); renderPrefixRows(); });
+  });
+  document.getElementById('prefixError').textContent = '';
+}
+
+function closePrefixManager(){
+  document.getElementById('prefixOverlay').style.display = 'none';
+}
+
+function savePrefixes(){
+  const errorEl = document.getElementById('prefixError');
+  errorEl.textContent = '';
+  const seen = {};
+  for(const r of prefixWorking){
+    const name = r.name.trim();
+    const ns = r.ns.trim();
+    if(name !== '' && !/^[A-Za-z][A-Za-z0-9\-_.]*$/.test(name)){
+      errorEl.textContent = 'Ongeldige prefix "' + name + '".'; return;
+    }
+    if(Object.prototype.hasOwnProperty.call(seen, name)){ errorEl.textContent = 'Prefix "' + name + '" komt twee keer voor.'; return; }
+    seen[name] = true;
+    if(!ns){ errorEl.textContent = 'Vul voor elke prefix een namespace-URI in.'; return; }
+    if(!/^[a-zA-Z][a-zA-Z0-9+.\-]*:/.test(ns)){ errorEl.textContent = 'Ongeldige namespace-URI voor prefix "' + name + '".'; return; }
+  }
+  const newPrefixes = {};
+  prefixWorking.forEach(r => { newPrefixes[r.name.trim()] = r.ns.trim(); });
+  Object.keys(model.prefixes).forEach(k => delete model.prefixes[k]);
+  Object.assign(model.prefixes, newPrefixes);
+  model.invPrefixes = {};
+  Object.keys(model.prefixes).forEach(p => { model.invPrefixes[model.prefixes[p]] = p; });
+  // Bewaar de als standaard gemarkeerde prefix (als die nog bestaat).
+  defaultPrefixName = (defaultPrefixName && Object.prototype.hasOwnProperty.call(newPrefixes, defaultPrefixName)) ? defaultPrefixName : '';
+  if(desktop()) desktop().setDefaultPrefix(defaultPrefixName).catch(() => {});
+  rebuildOptions();
+  hasUnsavedChanges = true;
+  updateDownloadState();
+  updateStatus();
+  closePrefixManager();
+  renderApp();
+}
+
+/* ================= serialisatie ================= */
+
+function slugify(text){
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'-').replace(/(^-+|-+$)/g,'');
+}
+function defaultLocalPrefix(){
+  // De als standaard gemarkeerde prefix heeft voorrang.
+  if(defaultPrefixName && model.prefixes[defaultPrefixName] !== undefined) return defaultPrefixName;
+  const core = new Set(['rdf','rdfs','owl','xsd','shacl','sh','dcat','dct','dc','skos']);
+  const names = Object.keys(model.prefixes);
+  const candidate = names.find(n => n && !core.has(n));
+  return candidate !== undefined ? candidate : (names.find(n => n) || '');
+}
+function suggestCurieFromLabel(label){
+  const slug = slugify(label);
+  if(!slug) return '';
+  const prefix = defaultLocalPrefix();
+  return prefix ? prefix + ':' + slug : slug;
+}
+
+function escapeLiteralBody(v){ return v.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
+function literalToTurtle(term){
+  const v = term.value;
+  let body;
+  if(v.indexOf('\n') >= 0 || v.indexOf('"') >= 0){
+    body = '"""' + v.replace(/\\/g,'\\\\').replace(/"""/g,'\\"\\"\\"') + '"""';
+  } else {
+    body = '"' + escapeLiteralBody(v) + '"';
+  }
+  if(term.lang) return body + '@' + term.lang;
+  if(term.datatype && term.datatype !== XSD+'string') return body + '^^' + uriToTurtle(term.datatype);
+  return body;
+}
+const SAFE_PN_LOCAL = /^[A-Za-z0-9_][A-Za-z0-9_.\-]*[A-Za-z0-9_\-]$|^[A-Za-z0-9_]$/;
+function uriToTurtle(uri){
+  const c = model.curie(uri);
+  if(c === uri) return '<' + uri + '>';
+  const local = c.slice(c.indexOf(':') + 1);
+  if(local.length > 0 && SAFE_PN_LOCAL.test(local)) return c;
+  return '<' + uri + '>';
+}
+function termToTurtle(term, isPredicate){
+  if(term.type === 'uri'){
+    if(isPredicate && term.value === RDF+'type') return 'a';
+    return uriToTurtle(term.value);
+  }
+  if(term.type === 'bnode') return term.value;
+  return literalToTurtle(term);
+}
+
+function serializeTurtle(){
+  const prefixes = model.prefixes;
+  let out = '';
+  Object.keys(prefixes).sort().forEach(p => { out += '@prefix ' + p + ': <' + prefixes[p] + '> .\n'; });
+  out += '\n';
+  const order = [];
+  const bySubj = new Map();
+  model.triples.forEach(t => {
+    const skey = t.s.type + ':' + t.s.value;
+    if(!bySubj.has(skey)){ bySubj.set(skey, { term:t.s, preds: new Map() }); order.push(skey); }
+    const entry = bySubj.get(skey);
+    if(!entry.preds.has(t.p.value)) entry.preds.set(t.p.value, []);
+    entry.preds.get(t.p.value).push(t.o);
+  });
+  order.forEach(skey => {
+    const entry = bySubj.get(skey);
+    const subjStr = termToTurtle(entry.term, false);
+    const lines = [...entry.preds.keys()].map(pUri => {
+      const predStr = termToTurtle({ type:'uri', value:pUri }, true);
+      const objStr = entry.preds.get(pUri).map(o => termToTurtle(o, false)).join(', ');
+      return '    ' + predStr + ' ' + objStr;
+    });
+    out += subjStr + '\n' + lines.join(' ;\n') + ' .\n\n';
+  });
+  return out;
+}
+
+function downloadTurtle(){ saveTurtle(false); }
+
+function saveTurtle(forceDialog){
+  if(!model) return;
+  const text = serializeTurtle();
+  if(desktop()){
+    const name = fileNameEl.textContent || 'bestand.ttl';
+    return desktop().save(text, name, forceDialog).then(result => {
+      if(!result || !result.saved) return result || { saved:false };
+      fileNameEl.textContent = result.name;
+      hasUnsavedChanges = false;
+      updateDownloadState();
+      updateStatus();
+      return result;
+    });
+  }
+  const blob = new Blob([text], { type:'text/turtle' });
+  const url = URL.createObjectURL(blob);
+  const base = (fileNameEl.textContent || 'bestand.ttl').replace(/\.(ttl|turtle|txt)$/i, '');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = base + '-gewijzigd.ttl';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ================= opstarten ================= */
+
+downloadBtn.addEventListener('click', downloadTurtle);
+newFileBtn.addEventListener('click', startNewModel);
+prefixBtn.addEventListener('click', openPrefixManager);
+document.getElementById('prefixSaveBtn').addEventListener('click', savePrefixes);
+document.getElementById('prefixCancelBtn').addEventListener('click', closePrefixManager);
+document.getElementById('addPrefixBtn').addEventListener('click', () => {
+  prefixWorking.push({ name:'', ns:'' });
+  renderPrefixRows();
+  const names = document.querySelectorAll('#prefixList .prefix-name');
+  if(names.length) names[names.length-1].focus();
+});
+document.getElementById('addDefaultPrefixesBtn').addEventListener('click', () => {
+  const have = new Set(prefixWorking.map(r => r.name.trim()));
+  let added = 0;
+  COMMON_PREFIXES.forEach(([name, ns]) => {
+    if(!have.has(name)) { prefixWorking.push({ name, ns }); added++; }
+  });
+  renderPrefixRows();
+  document.getElementById('prefixHint').textContent = added
+    ? added + ' standaardprefix' + (added === 1 ? '' : 'en') + ' toegevoegd.'
+    : 'Alle standaardprefixen staan er al in.';
+});
+document.getElementById('prefixOverlay').addEventListener('click', e => {
+  if(e.target.id === 'prefixOverlay') closePrefixManager();
+});
+document.getElementById('createOverlay').addEventListener('click', e => {
+  if(e.target.id === 'createOverlay') closeCreateModal();
+});
+document.getElementById('createModalBody').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.target.tagName !== 'BUTTON'){ e.preventDefault(); submitCreate(); }
+  else if(e.key === 'Escape'){ e.preventDefault(); closeCreateModal(); }
+});
+document.getElementById('emptyStateNewModelBtn').addEventListener('click', (e) => { e.preventDefault(); startNewModel(); });
+
+// Bundels: modal-bediening
+document.getElementById('shapesBtn').addEventListener('click', openShapesManager);
+document.getElementById('shapesCancelBtn').addEventListener('click', closeShapesManager);
+document.getElementById('shapesOverlay').addEventListener('click', e => {
+  if(e.target.id === 'shapesOverlay') closeShapesManager();
+});
+
+(async function boot(){
+  if(desktop()){
+    desktop().registerSaveHandlers(() => saveTurtle(false), () => saveTurtle(true));
+    try { defaultPrefixName = (await desktop().getDefaultPrefix()) || ''; } catch(err) { defaultPrefixName = ''; }
+    await initShapes();
+    showStartScreen();
+  } else {
+    showStartScreen();
+  }
+})();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Afhankelijkheden
+node_modules/
+
+# Build-uitvoer (npm run dist)
+dist/
+out/
+
+# macOS
+.DS_Store
+._*
+
+# Logs en tijdelijke bestanden
+*.log
+npm-debug.log*
+
+# Editors
+.vscode/
+.idea/
+
+# Lokaal gereedschap (voorkeuren van de assistent)
+.commandcode/
