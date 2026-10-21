@@ -559,7 +559,8 @@
   .ttl-text[readonly]{background:var(--panel);}
   .ttl-error{color:var(--error);font-size:12.5px;margin-top:8px;min-height:16px;white-space:pre-wrap;}
   .ttl-prefixes{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:6px;word-break:break-word;}
-  .detail-ttl-row{margin:-14px 0 20px;}
+  .detail-topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;}
+  .detail-topbar .detail-kind{margin-bottom:0;}
   .prefix-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
   .prefix-row input{padding:6px 8px;border:1px solid var(--line);border-radius:3px;font-size:13px;font-family:var(--mono);background:var(--bg);}
   .prefix-row input:focus{outline:none;border-color:var(--accent);}
@@ -696,8 +697,8 @@
 
 <div class="modal-overlay" id="resourceTtlOverlay" style="display:none;">
   <div class="modal ttl-modal">
-    <h3 class="modal-title" id="resourceTtlTitle">Turtle</h3>
-    <p class="edit-hint" style="margin:0 0 10px;">Bewerk hier de Turtle van deze resource en klik op <strong>Opslaan</strong> om de wijzigingen door te voeren. De prefixen van het document zijn beschikbaar.</p>
+    <h3 class="modal-title" id="resourceTtlTitle">TTL</h3>
+    <p class="edit-hint" style="margin:0 0 10px;">Bewerk hier de TTL van deze resource en klik op <strong>Opslaan</strong> om de wijzigingen door te voeren. De prefixen van het document zijn beschikbaar.</p>
     <textarea class="ttl-text" id="resourceTtlText" spellcheck="false" autocomplete="off"></textarea>
     <div class="ttl-error" id="resourceTtlError"></div>
     <div class="modal-actions">
@@ -709,8 +710,8 @@
 
 <div class="modal-overlay" id="ttlPreviewOverlay" style="display:none;">
   <div class="modal ttl-modal">
-    <h3 class="modal-title">Turtle-preview — hele document</h3>
-    <p class="edit-hint" style="margin:0 0 10px;">Dit is de Turtle zoals die bij het opslaan wordt geschreven. Alleen ter controle.</p>
+    <h3 class="modal-title">TTL-preview — hele document</h3>
+    <p class="edit-hint" style="margin:0 0 10px;">Dit is de TTL zoals die bij het opslaan wordt geschreven. Alleen ter controle.</p>
     <textarea class="ttl-text" id="ttlPreviewText" readonly spellcheck="false"></textarea>
     <div class="modal-actions">
       <button type="button" class="rel-picker-cancel" id="ttlPreviewClose">Sluiten</button>
@@ -1613,7 +1614,7 @@ function renderDetail(){
   const missingPaths = {};
   missing.forEach(r => { if(r.path) missingPaths[r.path] = r; });
 
-  let html = `<div class="detail-kind">${esc(kind)}</div>`;
+  let html = `<div class="detail-topbar"><span class="detail-kind">${esc(kind)}</span><button type="button" class="btn" id="resourceTtlBtn" title="Bekijk en bewerk de TTL van deze resource">TTL</button></div>`;
   let headingLabel = null, headingPred = null, headingTerm = null;
   const prefLabel = node.out.find(o => o.p === 'http://www.w3.org/2004/02/skos/core#prefLabel' && o.o.type === 'literal');
   const rdfsLabel = node.out.find(o => o.p === RDFS+'label' && o.o.type === 'literal');
@@ -1631,7 +1632,6 @@ function renderDetail(){
   }
   const cur = model.curie(uri);
   html += cur !== uri ? `<div class="uri">${esc(cur)} · ${esc(uri)}</div>` : `<div class="uri">${esc(uri)}</div>`;
-  html += `<div class="detail-ttl-row"><button type="button" class="btn" id="resourceTtlBtn" title="Bekijk en bewerk de Turtle van deze resource">Turtle</button></div>`;
 
   const types = [...node.types].filter(t => !isCoreURI(t));
   if(types.length){
@@ -3393,7 +3393,7 @@ function openResourceTtl(){
   const res = window.LDEdit.serialize.serializeSubject(model, ttlSubjectKey(selectedId));
   ttlEditSubject = selectedId;
   ttlEditConsumed = res.consumed || [];
-  document.getElementById('resourceTtlTitle').textContent = 'Turtle — ' + (labelOf(selectedId) || curieOf(selectedId));
+  document.getElementById('resourceTtlTitle').textContent = 'TTL — ' + (labelOf(selectedId) || curieOf(selectedId));
   document.getElementById('resourceTtlText').value = res.text;
   document.getElementById('resourceTtlError').textContent = '';
   document.getElementById('resourceTtlOverlay').style.display = 'flex';

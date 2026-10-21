@@ -121,6 +121,16 @@ function componentsFor(report, nodeValue) {
   // xsd:double zonder exponent moet gequoteerd blijven (bare zou xsd:decimal zijn).
   r = roundTrip('@prefix ex: <http://ex/> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:a ex:v "1.0"^^xsd:double .\n');
   check('serialize: xsd:double zonder exponent blijft gequoteerd', r.s.includes('"1.0"^^xsd:double'), r.s);
+
+  // Een lange inline blanco node wordt meerregelig met inspringing.
+  r = roundTrip('@prefix ex: <http://ex/> .\nex:a ex:b [ ex:predicaatEen "waarde-een" ; ex:predicaatTwee "waarde-twee" ; ex:predicaatDrie "waarde-drie" ] .\n');
+  check('serialize: lange bnode meerregelig', r.s.includes('[\n        ex:predicaatEen') && r.s.includes('\n    ] .'), r.s);
+  eq('serialize: round-trip (meerregelige bnode)', r.count, r.orig);
+
+  // Een lange lijst wordt ook meerregelig (één item per regel).
+  r = roundTrip('@prefix ex: <http://ex/> .\nex:a ex:b ( "aaaaaaaaaaaaaaaaaaaa" "bbbbbbbbbbbbbbbbbbbb" "cccccccccccccccccccc" "dddddddddddddddddddd" ) .\n');
+  check('serialize: lange lijst meerregelig', r.s.includes('(\n        "aaaaaaaaaaaaaaaaaaaa"'), r.s);
+  eq('serialize: round-trip (meerregelige lijst)', r.count, r.orig);
 })();
 
 /* ---------------- 1d. Serialisatie van één subject ---------------- */

@@ -37,6 +37,10 @@
 
   const SAFE_PN_LOCAL = /^[A-Za-z0-9_][A-Za-z0-9_.\-]*[A-Za-z0-9_\-]$|^[A-Za-z0-9_]$/;
 
+  // Vanaf deze regellengte wordt een object meerregelig geschreven.
+  const MAX_LINE = 100;
+  function indent(level){ return '    '.repeat(level); }
+
   function escapeLiteralBody(v){ return v.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
 
   // Bare (datatype-loze) vorm voor de standaard xsd-typen, of null. Alleen
@@ -179,32 +183,80 @@
 
     const stack = new Set();
 
-    function objectStr(o){
+    // Eén-regelige weergave van een waarde (voor korte objecten).
+    function objectSingle(o){
       if(o.type === 'bnode' && !stack.has(o.value)){
-        if(lists.has(o.value)) return listStr(o.value);
-        if(inlined.has(o.value)) return inlineBnode(o.value);
+        if(lists.has(o.value)) return listSingle(o.value);
+        if(inlined.has(o.value)) return bnodeSingle(o.value);
       }
       return termToTurtle(model, o, false);
     }
 
-    function inlineBnode(id){
+    function bnodeSingle(id){
       const e = index.byKey.get('bnode:' + id);
       if(!e) return termToTurtle(model, { type:'bnode', value:id }, false);
       stack.add(id);
       const parts = e.predOrder.map(pUri => {
         const predStr = termToTurtle(model, { type:'uri', value:pUri }, true);
-        const objs = e.preds.get(pUri).map(objectStr).join(', ');
+        const objs = e.preds.get(pUri).map(objectSingle).join(', ');
         return predStr + ' ' + objs;
       });
       stack.delete(id);
       return parts.length ? '[ ' + parts.join(' ; ') + ' ]' : '[]';
     }
 
-    function listStr(id){
+    function listSingle(id){
       stack.add(id);
-      const inner = lists.get(id).items.map(objectStr).join(' ');
+      const inner = lists.get(id).items.map(objectSingle).join(' ');
       stack.delete(id);
       return inner ? '( ' + inner + ' )' : '( )';
+    }
+
+    // Meerregelige weergave; de sluitende haak komt op `level`.
+    function objectMulti(o, level){
+      if(o.type === 'bnode' && !stack.has(o.value)){
+        if(lists.has(o.value)) return listMulti(o.value, level);
+        if(inlined.has(o.value)) return bnodeMulti(o.value, level);
+      }
+      return termToTurtle(model, o, false);
+    }
+
+    function bnodeMulti(id, level){
+      const e = index.byKey.get('bnode:' + id);
+      if(!e) return termToTurtle(model, { type:'bnode', value:id }, false);
+      stack.add(id);
+      const body = predicateStatements(e, level + 1);
+      stack.delete(id);
+      return '[\n' + body.join(' ;\n') + '\n' + indent(level) + ']';
+    }
+
+    function listMulti(id, level){
+      stack.add(id);
+      const body = lists.get(id).items.map(o => indent(level + 1) + objectMulti(o, level + 1));
+      stack.delete(id);
+      return '(\n' + body.join('\n') + '\n' + indent(level) + ')';
+    }
+
+    // De predicaat-regels van één subject. Past een object niet op de regel
+    // (of is het zelf meerregelig), dan komt het meerregelig; bij meerdere zulke
+    // objecten wordt het predicaat per object herhaald (zoals in het origineel).
+    function predicateStatements(entry, level){
+      const stmts = [];
+      entry.predOrder.forEach(pUri => {
+        const predStr = termToTurtle(model, { type:'uri', value:pUri }, true);
+        const head = indent(level) + predStr + ' ';
+        const objs = entry.preds.get(pUri);
+        const singles = objs.map(objectSingle);
+        const rendered = objs.map((o, i) =>
+          (singles[i].indexOf('\n') === -1 && head.length + singles[i].length <= MAX_LINE)
+            ? singles[i]
+            : objectMulti(o, level)
+        );
+        if(rendered.length === 1) stmts.push(head + rendered[0]);
+        else if(rendered.every(r => r.indexOf('\n') === -1)) stmts.push(head + rendered.join(', '));
+        else rendered.forEach(r => stmts.push(head + r));
+      });
+      return stmts;
     }
 
     // Het blok (subject + predicaten) van één subject, zonder prefixregels.
@@ -212,12 +264,7 @@
       const e = index.byKey.get(key);
       if(!e) return '';
       const subjStr = termToTurtle(model, e.term, false);
-      const lines = e.predOrder.map(pUri => {
-        const predStr = termToTurtle(model, { type:'uri', value:pUri }, true);
-        const objStr = e.preds.get(pUri).map(objectStr).join(', ');
-        return '    ' + predStr + ' ' + objStr;
-      });
-      return subjStr + '\n' + lines.join(' ;\n') + ' .\n\n';
+      return subjStr + '\n' + predicateStatements(e, 1).join(' ;\n') + ' .\n\n';
     }
 
     function prefixBlock(){
