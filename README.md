@@ -161,6 +161,18 @@ Let op: **commentaar blijft niet bewaard** en de opmaak wordt genormaliseerd (el
 node staat op één regel). Bewerk daarom een bestand met veel toelichtende comments liever niet
 via de app, of gebruik **Opslaan als…** naar een kopie.
 
+## Turtle bekijken en bewerken
+
+- **Per resource**: op de detailpagina staat een knop **Turtle**. Die opent de Turtle van precies
+  die resource (met zijn inline blanco nodes en collecties). Je kunt de tekst aanpassen en met
+  **Opslaan** (of ⌘⏎) doorvoeren; met Escape of **Annuleren** sluit je zonder wijziging. De
+  prefixen van het document zijn beschikbaar, zodat je korte namen kunt blijven gebruiken. Bij
+  een fout in de Turtle verschijnt de parsefout en blijft het venster open. Alleen de triples van
+  die resource (en de inline blanco nodes eruit) worden vervangen; de rest van het model blijft
+  staan.
+- **Hele document**: via het menu **Bestand → Turtle-preview…** (⇧⌘P) zie je de volledige Turtle
+  zoals die bij het opslaan wordt geschreven. Alleen ter controle.
+
 Welke eigenschappen de shapes bij een klasse voorschrijven bepaalt ook het **datatype** in het
 formulier: zodra je een eigenschap kiest, wordt het datatype uit de shape voorgeselecteerd
 (bijvoorbeeld `sh:datatype xsd:date` → "Datum (xsd:date)"). Staat het datatype als alternatief

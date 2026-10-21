@@ -123,7 +123,23 @@ function componentsFor(report, nodeValue) {
   check('serialize: xsd:double zonder exponent blijft gequoteerd', r.s.includes('"1.0"^^xsd:double'), r.s);
 })();
 
-/* ---------------- 1d. Ronde-trip van de meegeleverde shape-bestanden ---------------- */
+/* ---------------- 1d. Serialisatie van één subject ---------------- */
+
+(function testSerializeSubject(){
+  const m = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:a ex:b [ ex:c "x" ] ; ex:d "y" .\nex:z ex:k "ander" .\n'));
+  const r = SER.serializeSubject(m, 'uri:http://ex/a');
+  check('serializeSubject: alleen het blok van het subject', r.text.includes('ex:a') && !r.text.includes('ex:z'), r.text);
+  check('serializeSubject: geneste bnode inline', r.text.includes('[ ex:c "x" ]'), r.text);
+  eq('serializeSubject: één inline bnode gerapporteerd', r.consumed.length, 1);
+  check('serializeSubject: gerapporteerde id is een bnode', r.consumed[0].startsWith('_:'), JSON.stringify(r.consumed));
+
+  const m2 = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:s ex:or ( [ ex:d ex:a ] [ ex:d ex:b ] ) .\n'));
+  const r2 = SER.serializeSubject(m2, 'uri:http://ex/s');
+  check('serializeSubject: lijst als ( … )', r2.text.includes('( [ ex:d ex:a ] [ ex:d ex:b ] )'), r2.text);
+  eq('serializeSubject: lijstknopen en items gerapporteerd', r2.consumed.length, 4);
+})();
+
+/* ---------------- 1e. Ronde-trip van de meegeleverde shape-bestanden ---------------- */
 
 (function testShapeRoundTrip(){
   const files = fs.readdirSync(SHAPES_DIR).filter(f => f.endsWith('.ttl'));

@@ -8,7 +8,11 @@
    - blanco nodes die vaker gebruikt worden, in een cyclus zitten of een
      afwijkende lijst vormen, krijgen een eigen `_:id`-blok;
    - getallen/booleans met de standaard xsd-lexicale vorm worden zonder datatype
-     geschreven (`1` in plaats van `"1"^^xsd:integer`). */
+     geschreven (`1` in plaats van `"1"^^xsd:integer`).
+
+   `serializeSubject` levert het blok van één subject plus de id's van de blanco
+   nodes die daarin inline zijn geschreven, zodat de app die bij het bewerken
+   weet te vervangen. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -80,7 +84,6 @@
     return literalToTurtle(model, term);
   }
 
-  // Groepeert de triples per subject en houdt de volgorde van voorkomen aan.
   function buildIndex(triples){
     const order = [];
     const byKey = new Map();
@@ -94,7 +97,6 @@
     return { order, byKey };
   }
 
-  // Aantal keren dat een blanco node als waarde gebruikt wordt, plus de parent.
   function referenceInfo(triples){
     const count = new Map();
     const parent = new Map();
@@ -107,7 +109,8 @@
     return { count, parent };
   }
 
-  function serialize(model){
+  // Bouwt alle afgeleide informatie en de renderfuncties voor een model.
+  function prepare(model){
     const index = buildIndex(model.triples);
     const { count, parent } = referenceInfo(model.triples);
 
@@ -115,11 +118,8 @@
       const e = index.byKey.get('bnode:' + id);
       return Boolean(e && e.preds.has(RDF_FIRST));
     };
-
-    // Precies één keer gebruikt, geen lijstknooppunt.
     const isCandidate = id => count.get(id) === 1 && index.byKey.has('bnode:' + id) && !isListNode(id);
 
-    // Bereikbaar vanaf een knooppunt dat zelf een blok krijgt (dus geen losse cyclus).
     function reachable(id){
       let cur = id;
       const seen = new Set();
@@ -142,8 +142,6 @@
       if(isCandidate(id) && reachable(id)) inlined.add(id);
     });
 
-    // Goed gevormde RDF-collectie: elk knooppunt heeft precies rdf:first en
-    // rdf:rest, wordt één keer gebruikt en eindigt op rdf:nil.
     function tryList(headId){
       const items = [];
       const chain = [];
@@ -160,14 +158,14 @@
         if(count.get(cur) !== 1) return null;
         items.push(first[0]);
         chain.push(cur);
-        const r = rest[0];
-        if(r.type === 'uri' && r.value === RDF_NIL) return { items, chain };
-        if(r.type !== 'bnode') return null;
-        cur = r.value;
+        const rr = rest[0];
+        if(rr.type === 'uri' && rr.value === RDF_NIL) return { items, chain };
+        if(rr.type !== 'bnode') return null;
+        cur = rr.value;
       }
     }
 
-    const lists = new Map();       // headId -> { items, chain }
+    const lists = new Map();
     index.order.forEach(key => {
       if(!key.startsWith('bnode:')) return;
       const id = key.slice('bnode:'.length);
@@ -176,7 +174,6 @@
       if(res && reachable(id)) lists.set(id, res);
     });
 
-    // Knooppunten die inline verdwijnen en dus geen eigen blok krijgen.
     const consumed = new Set(inlined);
     lists.forEach(info => info.chain.forEach(id => consumed.add(id)));
 
@@ -210,25 +207,56 @@
       return inner ? '( ' + inner + ' )' : '( )';
     }
 
-    let out = '';
-    Object.keys(model.prefixes).sort().forEach(p => { out += '@prefix ' + p + ': <' + model.prefixes[p] + '> .\n'; });
-    out += '\n';
-
-    index.order.forEach(key => {
-      const isBnode = key.startsWith('bnode:');
-      const id = isBnode ? key.slice('bnode:'.length) : null;
-      if(isBnode && consumed.has(id)) return;
+    // Het blok (subject + predicaten) van één subject, zonder prefixregels.
+    function blockText(key){
       const e = index.byKey.get(key);
+      if(!e) return '';
       const subjStr = termToTurtle(model, e.term, false);
       const lines = e.predOrder.map(pUri => {
         const predStr = termToTurtle(model, { type:'uri', value:pUri }, true);
         const objStr = e.preds.get(pUri).map(objectStr).join(', ');
         return '    ' + predStr + ' ' + objStr;
       });
-      out += subjStr + '\n' + lines.join(' ;\n') + ' .\n\n';
+      return subjStr + '\n' + lines.join(' ;\n') + ' .\n\n';
+    }
+
+    function prefixBlock(){
+      let out = '';
+      Object.keys(model.prefixes).sort().forEach(p => { out += '@prefix ' + p + ': <' + model.prefixes[p] + '> .\n'; });
+      return out + '\n';
+    }
+
+    return { index, consumed, lists, inlined, blockText, prefixBlock };
+  }
+
+  function serialize(model){
+    const b = prepare(model);
+    let out = b.prefixBlock();
+    b.index.order.forEach(key => {
+      if(key.startsWith('bnode:') && b.consumed.has(key.slice('bnode:'.length))) return;
+      out += b.blockText(key);
     });
     return out;
   }
 
-  return { serialize, uriToTurtle, termToTurtle, literalToTurtle };
+  // Het Turtle-blok van één subject, plus de id's van de blanco nodes die daarin
+  // inline zijn geschreven (die horen dus bij dit blok).
+  function serializeSubject(model, subjectKey){
+    const b = prepare(model);
+    const consumed = new Set();
+    const visit = key => {
+      const e = b.index.byKey.get(key);
+      if(!e) return;
+      e.predOrder.forEach(p => e.preds.get(p).forEach(o => {
+        if(o.type === 'bnode' && b.consumed.has(o.value) && !consumed.has(o.value)){
+          consumed.add(o.value);
+          visit('bnode:' + o.value);
+        }
+      }));
+    };
+    visit(subjectKey);
+    return { text: b.blockText(subjectKey), consumed: [...consumed] };
+  }
+
+  return { serialize, serializeSubject, uriToTurtle, termToTurtle, literalToTurtle };
 });

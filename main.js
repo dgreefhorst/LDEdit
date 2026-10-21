@@ -422,6 +422,8 @@ async function buildMenu() {
         { label: 'Opslaan', accelerator: 'CmdOrCtrl+S', click: () => send('app:save') },
         { label: 'Opslaan als…', accelerator: 'Shift+CmdOrCtrl+S', click: () => send('app:save-as') },
         { type: 'separator' },
+        { label: 'Turtle-preview…', accelerator: 'Shift+CmdOrCtrl+P', click: () => send('app:ttl-preview') },
+        { type: 'separator' },
         { label: 'Prefixen…', accelerator: 'CmdOrCtrl+,', click: () => send('app:prefixes') }
       ]
     },

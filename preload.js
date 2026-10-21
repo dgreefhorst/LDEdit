@@ -68,6 +68,7 @@ window.addEventListener('DOMContentLoaded', () => {
   ipcRenderer.on('app:prefixes', () => document.getElementById('prefixBtn')?.click());
   ipcRenderer.on('app:shapes', () => document.getElementById('shapesBtn')?.click());
   ipcRenderer.on('app:save', () => { if (saveHandler) saveHandler(); });
+  ipcRenderer.on('app:ttl-preview', () => document.dispatchEvent(new Event('ldedit-ttl-preview')));
   ipcRenderer.on('app:save-as', () => { if (saveAsHandler) saveAsHandler(); });
   ipcRenderer.on('app:save-and-close', async () => {
     let outcome = null;
