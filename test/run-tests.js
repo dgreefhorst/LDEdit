@@ -9,6 +9,7 @@ const T = require('../js/turtle.js');
 const M = require('../js/model.js');
 const S = require('../js/shacl.js');
 const SER = require('../js/serialize.js');
+const REP = require('../js/report.js');
 
 const ROOT = path.join(__dirname, '..');
 const SHAPES_DIR = path.join(ROOT, 'shapes');
@@ -54,7 +55,6 @@ function componentsFor(report, nodeValue) {
 })();
 
 /* ---------------- 1b. Prefixen: bestand bepaalt de prefixen ---------------- */
-
 (function testFilePrefixes() {
   const withPrefixes = M.buildModel(
     T.parse('@prefix ex: <http://ex/> .\n@prefix foaf: <http://xmlns.com/foaf/0.1/> .\n ex:a foaf:name "x" .\n'),
@@ -73,6 +73,31 @@ function componentsFor(report, nodeValue) {
 
   const noPrefixes = M.buildModel(T.parse('<http://ex/a> <http://ex/b> <http://ex/c> .\n'), { useFilePrefixes: true });
   check('prefixen: bestand zonder prefixes krijgt standaardprefixen', noPrefixes.prefixes['rdf'] !== undefined);
+})();
+
+/* ---------------- 1b-2. Core-namespaces per modeltype ---------------- */
+
+(function testKeepCoreNamespaces(){
+  const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+  const RDFS = 'http://www.w3.org/2000/01/rdf-schema#';
+  const OWL = 'http://www.w3.org/2002/07/owl#';
+  const SH = 'http://www.w3.org/ns/shacl#';
+
+  const owlSrc = '@prefix ex: <http://ex/> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n@prefix owl: <http://www.w3.org/2002/07/owl#> .\nex:Persoon a owl:Class ; rdfs:label "Persoon" ; rdfs:subClassOf ex:Ding .\n';
+  const plain = M.buildModel(T.parse(owlSrc), { useFilePrefixes: true });
+  check('core: rdfs:label standaard gefilterd', plain.properties.indexOf(RDFS + 'label') === -1);
+  check('core: owl:Class standaard gefilterd', plain.classes.indexOf(OWL + 'Class') === -1);
+
+  const kept = M.buildModel(T.parse(owlSrc), { useFilePrefixes: true, keepCoreNamespaces: [RDF, RDFS, OWL] });
+  check('core: rdfs:label aanwezig bij OWL/RDFS', kept.properties.indexOf(RDFS + 'label') !== -1);
+  check('core: rdfs:subClassOf aanwezig bij OWL/RDFS', kept.properties.indexOf(RDFS + 'subClassOf') !== -1);
+  check('core: owl:Class aanwezig bij OWL/RDFS', kept.classes.indexOf(OWL + 'Class') !== -1);
+
+  const shSrc = '@prefix ex: <http://ex/> .\n@prefix sh: <http://www.w3.org/ns/shacl#> .\nex:S a sh:NodeShape ; sh:path ex:p .\n';
+  const shKept = M.buildModel(T.parse(shSrc), { useFilePrefixes: true, keepCoreNamespaces: [SH] });
+  check('core: sh:path aanwezig bij SHACL', shKept.properties.indexOf(SH + 'path') !== -1);
+  const shPlain = M.buildModel(T.parse(shSrc), { useFilePrefixes: true });
+  check('core: sh:path standaard gefilterd', shPlain.properties.indexOf(SH + 'path') === -1);
 })();
 
 /* ---------------- 1c. Serialisatie: blanco nodes inline ---------------- */
@@ -171,6 +196,34 @@ function componentsFor(report, nodeValue) {
   const triA = orig.reduce((n, f) => n + T.parse(f.text).triples.length, 0);
   const triB = rt.reduce((n, f) => n + T.parse(f.text).triples.length, 0);
   eq('shapes-round-trip: aantal triples gelijk', triB, triA);
+})();
+
+/* ---------------- 1f. Rapportage ---------------- */
+
+(function testReport(){
+  const SKOS = 'http://www.w3.org/2004/02/skos/core#';
+  const RDFS = 'http://www.w3.org/2000/01/rdf-schema#';
+  const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+
+  const skosModel = M.buildModel(T.parse('@prefix ex: <http://ex/> . @prefix skos: <http://www.w3.org/2004/02/skos/core#> .\nex:a skos:prefLabel "A" ; skos:definition "Def A" .\n'), { useFilePrefixes: true });
+  eq('rapportage: skos-kolommen als die bestaan', REP.defaultColumns(skosModel).join(','), SKOS + 'prefLabel,' + SKOS + 'definition');
+
+  const rdfsModel = M.buildModel(T.parse('@prefix ex: <http://ex/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\nex:a rdfs:label "A" ; rdfs:comment "C" .\n'), { useFilePrefixes: true });
+  eq('rapportage: rdfs-kolommen als skos ontbreekt', REP.defaultColumns(rdfsModel).join(','), RDFS + 'label,' + RDFS + 'comment');
+
+  const m = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:a ex:p "een" ; ex:p "twee" ; ex:q ex:other .\n'), { useFilePrefixes: true });
+  const table = REP.buildTable(m, ['http://ex/a'], ['http://ex/p', 'http://ex/q']);
+  eq('rapportage: kolomkoppen', table.header.join('|'), 'resource|ex:p|ex:q');
+  eq('rapportage: rij met waarden', table.rows[0].join('|'), 'http://ex/a|een; twee|ex:other');
+
+  const csv = REP.toCsv({ header: ['a', 'b'], rows: [['x,y', 'zeg "hallo"'], ['n', 'regel\nnieuw']] });
+  check('rapportage: UTF-8 BOM', csv.charCodeAt(0) === 0xFEFF, 'geen BOM');
+  check('rapportage: komma gequoteerd', csv.includes('"x,y"'), csv);
+  check('rapportage: quotes verdubbeld', csv.includes('"zeg ""hallo"""'), csv);
+  check('rapportage: regeleinde in cel', csv.includes('"regel\nnieuw"'), csv);
+
+  const withType = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:a a ex:C .\n'), { useFilePrefixes: true });
+  check('rapportage: rdf:type niet in de kolomkeuzes', REP.predicatesInModel(withType).indexOf(RDF + 'type') === -1);
 })();
 
 /* ---------------- 2. Shapes bouwen uit de meegeleverde bestanden ---------------- */

@@ -95,7 +95,7 @@ async function listShapeFiles(dir) {
   }
 }
 
-// Bundels: shapes + bijbehorende ontologie(ën) die als geheel worden gekozen.
+// Modeltypes: shapes + bijbehorende ontologie(ën) die als geheel worden gekozen.
 // De indeling staat in bundles.json in de shapes-map; bestanden die daar niet in
 // voorkomen worden ieder hun eigen bundel.
 async function listBundles(dir, files) {
@@ -117,13 +117,18 @@ async function listBundles(dir, files) {
       id,
       name: typeof entry.name === 'string' && entry.name ? entry.name : id,
       description: typeof entry.description === 'string' ? entry.description : '',
+      // Namespaces (prefixnamen) waarvan de termen bij dit modeltype niet uit de
+      // keuzelijsten gefilterd mogen worden, zoals "rdf", "rdfs", "owl" of "sh".
+      keepNamespaces: Array.isArray(entry.keepNamespaces)
+        ? entry.keepNamespaces.filter((n) => typeof n === 'string')
+        : [],
       files: list
     });
     list.forEach((f) => used.add(f));
   }
   files
     .filter((f) => !used.has(f))
-    .forEach((f) => bundles.push({ id: f, name: f, description: '', files: [f] }));
+    .forEach((f) => bundles.push({ id: f, name: f, description: '', keepNamespaces: [], files: [f] }));
   return bundles;
 }
 
@@ -238,6 +243,27 @@ async function writeDocument({ text, suggestedName, forceDialog }) {
 }
 
 ipcMain.handle('ttl:save', (_event, payload) => writeDocument(payload));
+// CSV-rapportage opslaan. Staat los van het document: het wijzigt het huidige
+// bestand en de titel niet.
+ipcMain.handle('report:save', async (_event, payload) => {
+  const { text, suggestedName } = payload || {};
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Rapportage opslaan',
+    defaultPath: path.join(app.getPath('documents'), suggestedName || 'rapportage.csv'),
+    filters: [
+      { name: 'CSV', extensions: ['csv'] },
+      { name: 'Alle bestanden', extensions: ['*'] }
+    ]
+  });
+  if (canceled || !filePath) return { saved: false, canceled: true };
+  try {
+    await fs.writeFile(filePath, text, 'utf8');
+  } catch (err) {
+    dialog.showErrorBox('Opslaan mislukt', `${filePath}\n\n${err.message}`);
+    return { saved: false, error: err.message };
+  }
+  return { saved: true, path: filePath, name: path.basename(filePath) };
+});
 ipcMain.handle('ttl:recent', () => listRecent());
 // Synchrone vraag van de renderer bij het opstarten: wordt er al een bestand
 // geopend (vanuit Finder of via de opdrachtregel)? Zo niet, dan tonen we het
@@ -423,6 +449,7 @@ async function buildMenu() {
         { label: 'Opslaan als…', accelerator: 'Shift+CmdOrCtrl+S', click: () => send('app:save-as') },
         { type: 'separator' },
         { label: 'TTL-preview…', accelerator: 'Shift+CmdOrCtrl+P', click: () => send('app:ttl-preview') },
+        { label: 'Rapportage…', accelerator: 'CmdOrCtrl+E', click: () => send('app:report') },
         { type: 'separator' },
         { label: 'Prefixen…', accelerator: 'CmdOrCtrl+,', click: () => send('app:prefixes') }
       ]
@@ -430,7 +457,7 @@ async function buildMenu() {
     {
       label: 'Shapes',
       submenu: [
-        { label: 'Bundels…', accelerator: 'Shift+CmdOrCtrl+H', click: () => send('app:shapes') }
+        { label: 'Modeltypes…', accelerator: 'Shift+CmdOrCtrl+H', click: () => send('app:shapes') }
       ]
     },
     {

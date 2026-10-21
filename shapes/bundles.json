@@ -42,14 +42,16 @@
   },
   {
     "id": "type-ontologie",
-    "name": "Ontologie",
+    "name": "OWL/RDFS",
     "description": "RDF, RDFS en OWL.",
+    "keepNamespaces": ["rdf", "rdfs", "owl"],
     "files": ["rdf.ttl", "rdfs.ttl", "owl.ttl"]
   },
   {
     "id": "shacl",
     "name": "SHACL",
     "description": "Vocabulaire voor SHACL-shapes.",
+    "keepNamespaces": ["sh"],
     "files": ["shacl.ttl"]
   }
 ]

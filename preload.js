@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('ttlDesktop', {
   hasStartupFile: () => Boolean(startupFile),
   save: (text, suggestedName, forceDialog) =>
     ipcRenderer.invoke('ttl:save', { text, suggestedName, forceDialog }),
+  saveCsv: (text, suggestedName) =>
+    ipcRenderer.invoke('report:save', { text, suggestedName }),
   getRecentFiles: () => ipcRenderer.invoke('ttl:recent'),
   openPath: (filePath) => ipcRenderer.invoke('ttl:open-path', filePath),
   openDialog: () => ipcRenderer.invoke('ttl:open-dialog'),
@@ -69,6 +71,7 @@ window.addEventListener('DOMContentLoaded', () => {
   ipcRenderer.on('app:shapes', () => document.getElementById('shapesBtn')?.click());
   ipcRenderer.on('app:save', () => { if (saveHandler) saveHandler(); });
   ipcRenderer.on('app:ttl-preview', () => document.dispatchEvent(new Event('ldedit-ttl-preview')));
+  ipcRenderer.on('app:report', () => document.dispatchEvent(new Event('ldedit-report')));
   ipcRenderer.on('app:save-as', () => { if (saveAsHandler) saveAsHandler(); });
   ipcRenderer.on('app:save-and-close', async () => {
     let outcome = null;

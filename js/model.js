@@ -66,6 +66,12 @@
         if (prefixes[prefix] === undefined) prefixes[prefix] = ns;
       });
     }
+    // Core-namespaces (RDF/RDFS/OWL/SHACL/XSD) worden normaal uit de klassen- en
+    // eigenschappenlijsten gefilterd. Voor een passend modeltype kan dat per
+    // namespace worden uitgezet, zodat je bijv. bij OWL/RDFS wél rdfs:label of
+    // owl:Class kunt kiezen en bij SHACL wél sh:path.
+    const keepCore = (options && Array.isArray(options.keepCoreNamespaces)) ? options.keepCoreNamespaces : [];
+    const isExcluded = uri => isCoreURI(uri) && !keepCore.some(ns => uri.startsWith(ns));
     const invPrefixes = {};
     Object.keys(prefixes).forEach(p => { invPrefixes[prefixes[p]] = p; });
 
@@ -123,12 +129,12 @@
       node.types.forEach(t => usedAsClass.add(t));
     });
 
-    const allClassURIs = new Set([...declaredClasses, ...usedAsClass].filter(u => !isCoreURI(u)));
+    const allClassURIs = new Set([...declaredClasses, ...usedAsClass].filter(u => !isExcluded(u)));
 
     // eigenschappen: gedeclareerd als eigenschapstype, OF ergens als predicate gebruikt
     const allPropURIs = new Set();
-    [...declaredObjProps, ...declaredDataProps, ...declaredProps].forEach(u => { if (!isCoreURI(u)) allPropURIs.add(u); });
-    Object.keys(predUsage).forEach(u => { if (!isCoreURI(u) && u !== RDF + 'type') allPropURIs.add(u); });
+    [...declaredObjProps, ...declaredDataProps, ...declaredProps].forEach(u => { if (!isExcluded(u)) allPropURIs.add(u); });
+    Object.keys(predUsage).forEach(u => { if (!isExcluded(u) && u !== RDF + 'type') allPropURIs.add(u); });
 
     function classifyProp(uri) {
       if (declaredObjProps.has(uri)) return 'relatie';
@@ -149,7 +155,7 @@
     const individuals = [];
     Object.values(nodes).forEach(node => {
       if (allClassURIs.has(node.id) || allPropURIs.has(node.id)) return;
-      const meaningfulTypes = [...node.types].filter(t => !isCoreURI(t));
+      const meaningfulTypes = [...node.types].filter(t => !isExcluded(t));
       if (meaningfulTypes.length > 0 || node.out.length > 0) {
         individuals.push(node.id);
       }

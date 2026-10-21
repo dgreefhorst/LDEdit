@@ -50,6 +50,8 @@ npm run dist
 | `ldedit.html` | De eigenlijke weergave/beheerder (zijbalk met filters, shapes-beheer, validatieweergave) |
 | `js/turtle.js` | Turtle/RDF-parser (gedeeld met de tests) |
 | `js/model.js` | Modelopbouw uit geparseerde triples (nodes, klassen, instanties, labels) |
+| `js/serialize.js` | Turtle-serialisatie (blanco nodes inline, lijsten, opmaak) |
+| `js/report.js` | Rapportage: tabel en CSV-export |
 | `js/shacl.js` | SHACL-engine: shapes parsen, targets bepalen, constraints en SPARQL-subset evalueren |
 | `shapes/` | De meegeleverde bundels met SHACL-shapes en ontologieën (MIM, NL-SBB, DCAT-AP-NL, FDS-DQV, MDTO) plus `bundles.json` |
 | `test/run-tests.js` | Node-tests |
@@ -191,24 +193,45 @@ Heeft de shape een **`sh:defaultValue`** (bijvoorbeeld `sh:defaultValue false` b
 `mim:indicatieAbstractObject`), dan staat die waarde al in het veld — inclusief het bijbehorende
 datatype — zodat je alleen nog hoeft te bevestigen. Je kunt hem gewoon aanpassen.
 
-## Modeltype en bundels
+## Modeltype
 
-In de zijbalk kies je onder **Modeltype** een bundel. Via het menu **Shapes → Bundels…**
-(⇧⌘H) open je een overzicht van alle bundels met hun volledige inhoud: bestanden,
+In de zijbalk kies je onder **Modeltype** een modeltype. Via het menu **Shapes → Modeltypes…**
+(⇧⌘H) open je een overzicht van alle modeltypes met hun volledige inhoud: bestanden,
 shape-tellingen en omschrijving. Daar kun je ook het modeltype kiezen.
 
-- Een **bundel** bevat de SHACL-shapes plus de bijbehorende ontologie(ën)/vocabularia en
-  wordt als geheel toegepast. De shapes komen uit de map `shapes/` die met de app wordt
-  meegeleverd (bundels MIM, NL-SBB, DCAT-AP-NL, FDS-DQV, MDTO, Ontologie en SHACL); die map
-  is niet instelbaar. De bundels bevatten ook de externe vocabularia die de shapes
+- Een **modeltype** bundelt de SHACL-shapes plus de bijbehorende ontologie(ën)/vocabularia en
+  wordt als geheel toegepast. De bestanden komen uit de map `shapes/` die met de app wordt
+  meegeleverd (modeltypes MIM, NL-SBB, DCAT-AP-NL, FDS-DQV, MDTO, **OWL/RDFS** en **SHACL**); die
+  map is niet instelbaar. De modeltypes bevatten ook de externe vocabularia die de shapes
   gebruiken: **SKOS, DCAT, DQV, PROV-O, DCMI Terms, ADMS, vCard en FOAF** (opgehaald bij
   W3C/DCMI/FOAF; SKOS en FOAF naar Turtle geconverteerd).
 - Je kiest één modeltype tegelijk, of "geen". Een bestand dat niet in `bundles.json`
-  voorkomt wordt als eigen bundel getoond.
-- Een ontologie in een bundel geldt als achtergrondkennis: ze levert `rdf:type`- en
+  voorkomt wordt als eigen modeltype getoond.
+- Een ontologie in een modeltype geldt als achtergrondkennis: ze levert `rdf:type`- en
   `rdfs:subClassOf`-informatie voor `sh:class`- en `sh:targetClass`-controles en vult
   ontbrekende eigenschappen aan (zonder bestaande waarden te verdubbelen). De dataview van de
   app blijft daarbij ongewijzigd.
+- Bij het modeltype **OWL/RDFS** worden de RDF-, RDFS- en OWL-termen **niet** uit de
+  keuzelijsten gefilterd, zodat je bijvoorbeeld `rdfs:label`, `rdfs:subClassOf` of `owl:Class`
+  kunt kiezen. Bij **SHACL** geldt dat voor de `sh:`-termen (zoals `sh:path`). Welke namespaces
+  dat zijn, staat per modeltype in `shapes/bundles.json` (`keepNamespaces`).
+
+## Rapportage (CSV)
+
+Via het menu **Bestand → Rapportage…** (⌘E) maak je een tabel van de resources en exporteer je
+die naar **CSV**.
+
+- **Soort** en **Klasse** zijn dezelfde filters als in de zijbalk: instanties, klassen,
+  eigenschappen of relaties, en de klasse beperkt de lijst (instanties op `rdf:type`, klassen op
+  `rdfs:subClassOf`, eigenschappen/relaties op `rdfs:domain`). Je stelt ze in de rapportage zelf in;
+  ze beginnen met de waarden uit de zijbalk.
+- **Kolommen** kies je zelf. Standaard staan `skos:prefLabel` en `skos:definition` aan als die in
+  het model voorkomen; anders `rdfs:label` en `rdfs:comment`. Alle overige predicaten uit het model
+  kun je aanvinken.
+- De eerste kolom is altijd de **resource** (de IRI). Heeft een resource meerdere waarden voor een
+  kolom, dan staan ze met `; ` gescheiden in de cel.
+- De CSV is UTF-8 (met BOM, zodat Excel de accenten goed leest), kommagescheiden, met de
+  gebruikelijk quoting voor komma's, aanhalingstekens en regeleinden.
 
 ## Prefixen en standaardprefix
 

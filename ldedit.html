@@ -561,6 +561,22 @@
   .ttl-prefixes{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:6px;word-break:break-word;}
   .detail-topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;}
   .detail-topbar .detail-kind{margin-bottom:0;}
+
+  /* Rapportage */
+  .report-filters{display:flex;gap:12px;}
+  .report-filters .report-field{flex:1;}
+  .report-field{margin-bottom:12px;}
+  .report-field > label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .report-field select{
+    width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:3px;
+    font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);
+  }
+  .report-field select:focus{outline:none;border-color:var(--accent);}
+  .report-cols-title{font-size:11px;font-weight:600;color:var(--ink-soft);margin:0 0 5px;}
+  .report-cols{max-height:250px;overflow-y:auto;border:1px solid var(--line);border-radius:3px;padding:6px 10px;background:var(--bg);}
+  .report-col{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:13px;cursor:pointer;word-break:break-all;}
+  .report-col .rc-uri{font-family:var(--mono);font-size:11px;color:var(--ink-soft);}
+  .report-count{font-size:12px;color:var(--ink-soft);margin-top:10px;min-height:16px;}
   .prefix-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
   .prefix-row input{padding:6px 8px;border:1px solid var(--line);border-radius:3px;font-size:13px;font-family:var(--mono);background:var(--bg);}
   .prefix-row input:focus{outline:none;border-color:var(--accent);}
@@ -632,7 +648,7 @@
     <button class="btn" id="newFileBtn">+ Nieuw model</button>
     <button class="btn" id="downloadBtn" style="display:none;">Download gewijzigd bestand</button>
     <button class="btn" id="prefixBtn" style="display:none;">Prefixen</button>
-    <button class="btn" id="shapesBtn" style="display:none;">Bundels…</button>
+    <button class="btn" id="shapesBtn" style="display:none;">Modeltypes…</button>
     <span id="fileName"></span>
     <span id="status"></span>
   </div>
@@ -656,10 +672,10 @@
 
 <div class="modal-overlay" id="shapesOverlay" style="display:none;">
   <div class="modal">
-    <h3 class="modal-title">Bundels</h3>
+    <h3 class="modal-title">Modeltypes</h3>
     <p class="edit-hint" style="margin:0 0 14px;">
-      Een bundel bevat SHACL-shapes plus de bijbehorende ontologie(ën). Kies hieronder het
-      modeltype, of in de zijbalk. De lijst toont per bundel de volledige inhoud.
+      Een modeltype bundelt SHACL-shapes met de bijbehorende ontologie(ën). Kies hieronder één
+      modeltype, of in de zijbalk. De lijst toont per modeltype de volledige inhoud.
     </p>
     <div class="shapes-dir">
       <span class="shapes-dir-path" id="shapesDirPath"></span>
@@ -719,9 +735,22 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="reportOverlay" style="display:none;">
+  <div class="modal">
+    <h3 class="modal-title">Rapportage</h3>
+    <p class="edit-hint" style="margin:0 0 12px;">Kies de kolommen en de filters en exporteer de tabel naar CSV.</p>
+    <div id="reportBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn primary" id="reportExportBtn">Exporteer CSV</button>
+      <button type="button" class="rel-picker-cancel" id="reportCancelBtn">Annuleren</button>
+    </div>
+  </div>
+</div>
+
 <script src="js/turtle.js"></script>
 <script src="js/model.js"></script>
 <script src="js/serialize.js"></script>
+<script src="js/report.js"></script>
 <script src="js/shacl.js"></script>
 <script>
 (function(){
@@ -730,7 +759,7 @@
 const parseTurtle = window.LDEdit.turtle.parse;
 const MOD = window.LDEdit.model;
 const SHACL = window.LDEdit.shacl;
-const { RDF, RDFS, OWL, XSD, isCoreURI, LABEL_PREDS, DESC_PREDS, COMMON_PREFIXES, buildModel } = MOD;
+const { RDF, RDFS, OWL, SHACL: SHACL_NS, XSD, isCoreURI, LABEL_PREDS, DESC_PREDS, COMMON_PREFIXES, buildModel } = MOD;
 
 /* ================= state ================= */
 
@@ -768,6 +797,9 @@ let shapes = null;            // gebouwde shapes-register
 let validation = null;        // laatste validatierapport
 let validationStale = true;
 let shapesState = { dir: '', files: [], applied: [] };
+// Core-namespaces die bij het huidige modeltype niet uit de keuzelijsten
+// gefilterd worden (bijv. rdf/rdfs/owl bij OWL/RDFS, sh bij SHACL).
+let keepCoreNamespaces = [];
 
 let currentEditableTerms = [];
 let currentEditableLangs = [];
@@ -902,6 +934,7 @@ async function initShapes(){
   if(!desktop()) return;
   try{
     shapesState = await desktop().getShapesState();
+    refreshKeepCoreNamespaces();
     await loadAppliedShapes();
   }catch(err){
     console.error('Kon shapes niet laden:', err);
@@ -918,7 +951,7 @@ async function loadAppliedShapes(){
   shapes = SHACL.buildShapes(parsed);
 }
 
-// Alle bestanden van de gekozen bundels (shapes + ontologieën).
+// Alle bestanden van het gekozen modeltype (shapes + ontologieën).
 function bundleFiles(ids){
   const set = new Set();
   (shapesState.bundles || []).forEach(b => {
@@ -942,11 +975,26 @@ function markValidationStale(){ validationStale = true; }
 
 /* ================= Shapes-beheer / modeltype ================= */
 
-// Het gekozen modeltype (één bundel tegelijk).
+// Het gekozen modeltype (één tegelijk).
 function currentModelType(){
   const applied = shapesState.applied || [];
   const known = (shapesState.bundles || []).map(b => b.id);
   return applied.find(id => known.indexOf(id) !== -1) || '';
+}
+
+// Namespaces die het huidige modeltype niet wil wegfilteren (uit bundles.json).
+const CORE_NS_BY_KEY = { rdf: RDF, rdfs: RDFS, owl: OWL, sh: SHACL_NS, shacl: SHACL_NS, xsd: XSD };
+function refreshKeepCoreNamespaces(){
+  const bundle = (shapesState.bundles || []).find(b => b.id === currentModelType());
+  const keys = (bundle && bundle.keepNamespaces) || [];
+  keepCoreNamespaces = keys.map(k => CORE_NS_BY_KEY[String(k).toLowerCase()]).filter(Boolean);
+}
+
+// Als de core-filter (isCoreURI), maar de namespaces van het modeltype blijven
+// beschikbaar — zodat je bij OWL/RDFS wél rdfs:label of owl:Class kunt kiezen en
+// bij SHACL wél sh:path.
+function isExcludedCore(uri){
+  return isCoreURI(uri) && !keepCoreNamespaces.some(ns => uri.startsWith(ns));
 }
 
 function bundleSelectOptions(){
@@ -961,13 +1009,20 @@ function bundleSelectOptions(){
 async function applyModelType(id){
   shapesState = await desktop().setAppliedShapes(id ? [id] : []);
   await loadAppliedShapes();
+  refreshKeepCoreNamespaces();
+  if(model){
+    // Klassen en eigenschappen opnieuw afleiden, nu met de namespaces van dit
+    // modeltype niet weggefilterd.
+    model = buildModel({ prefixes: model.prefixes, triples: model.triples }, { useFilePrefixes: true, keepCoreNamespaces });
+    rebuildOptions();
+  }
   markValidationStale();
   if(model) renderApp();
   else updateStatus();
 }
 
 async function openShapesManager(){
-  if(!desktop()){ alert('Bundels zijn alleen beschikbaar in de LDEdit-app.'); return; }
+  if(!desktop()){ alert('Modeltypes zijn alleen beschikbaar in de LDEdit-app.'); return; }
   shapesState = await desktop().getShapesState();
   await loadShapeTexts();
   renderShapesModal();
@@ -999,7 +1054,7 @@ function renderShapesModal(){
       meta = built.nodeShapeCount + ' node shapes · ' + built.propertyShapeCount + ' property shapes';
       if(built.nodeShapeCount === 0) hint = 'Geen shapes — wordt als achtergrondontologie gebruikt.';
     }catch(err){
-      hint = 'Kon deze bundel niet lezen: ' + err.message;
+      hint = 'Kon dit modeltype niet lezen: ' + err.message;
     }
     return `<label class="shapes-file">
       <input type="radio" name="bundle" value="${esc(b.id)}" ${b.id === current ? 'checked' : ''}>
@@ -1187,7 +1242,7 @@ async function loadFile(file){
   statusEl.className = '';
   const text = await file.text();
   try{
-    model = buildModel(parseTurtle(stripBOM(text)), { useFilePrefixes: true });
+    model = buildModel(parseTurtle(stripBOM(text)), { useFilePrefixes: true, keepCoreNamespaces });
     sessionBnodes.clear();
     bnodeExpandOverride.clear();
     selectedId = null;
@@ -1227,7 +1282,7 @@ function updateStatus(){
   const items = currentItems().length;
   statusEl.textContent = items + ' item' + (items === 1 ? '' : 's') +
     ' · ' + model.tripleCount + ' triples' +
-    (active ? ' · ' + active + ' shapebundel' + (active === 1 ? '' : 's') : ' · geen shapebundels') +
+    (active ? ' · ' + active + ' modeltype' + (active === 1 ? '' : 's') : ' · geen modeltype') +
     (hasUnsavedChanges ? ' · gewijzigd' : '');
   statusEl.className = '';
 }
@@ -1303,7 +1358,7 @@ function renderNewModelForm(){
 }
 
 function createNewModel(prefix, namespace, filename){
-  model = buildModel({ prefixes: { [prefix]: namespace }, triples: [] });
+  model = buildModel({ prefixes: { [prefix]: namespace }, triples: [] }, { keepCoreNamespaces });
   sessionBnodes.clear();
   bnodeExpandOverride.clear();
   selectedId = null;
@@ -1338,7 +1393,7 @@ function showStartScreen(){
         <div class="welcome-actions">
           <button type="button" class="btn primary" id="welcomeNewBtn">+ Nieuw model</button>
           <button type="button" class="btn" id="welcomeOpenBtn">Ander bestand openen…</button>
-          <button type="button" class="btn" id="welcomeShapesBtn">Bundels…</button>
+          <button type="button" class="btn" id="welcomeShapesBtn">Modeltypes…</button>
         </div>
         <div class="welcome-heading">Recente bestanden</div>
         <div class="welcome-recents" id="welcomeRecents"><div class="welcome-empty">Laden…</div></div>
@@ -1467,15 +1522,19 @@ function classFilterOptions(){
 // Maakt de items zichtbaar voor de gekozen soort, en past het klassefilter toe.
 // Het klassefilter werkt per soort: instanties op rdf:type, klassen op
 // rdfs:subClassOf, eigenschappen en relaties op hun rdfs:domain.
-function currentItems(){
+function itemsFor(kind, klass){
   let items;
-  if(kindFilter === 'classes') items = model.classes.slice();
-  else if(kindFilter === 'dataproperties') items = model.properties.filter(p => model.propKind[p] === 'eigenschap');
-  else if(kindFilter === 'objectproperties') items = model.properties.filter(p => model.propKind[p] === 'relatie');
+  if(kind === 'classes') items = model.classes.slice();
+  else if(kind === 'dataproperties') items = model.properties.filter(p => model.propKind[p] === 'eigenschap');
+  else if(kind === 'objectproperties') items = model.properties.filter(p => model.propKind[p] === 'relatie');
   else items = individualList();
   items = items.filter(isDefinedItem);
-  if(classFilter) items = items.filter(u => matchesClassFilter(u));
+  if(klass) items = items.filter(u => matchesClassFilter(u, kind, klass));
   return items;
+}
+
+function currentItems(){
+  return itemsFor(kindFilter, classFilter);
 }
 
 // De instanties uit het model, aangevuld met knooppunten die daar in deze sessie
@@ -1489,7 +1548,7 @@ function individualList(){
     if(seen.has(id)) return;
     if(model.classes.includes(id) || model.properties.includes(id)) return;
     const node = model.nodes[id];
-    const typed = [...node.types].some(t => !isCoreURI(t));
+    const typed = [...node.types].some(t => !isExcludedCore(t));
     if(!typed && node.out.length === 0 && !sessionBnodes.has(id)) return;
     seen.add(id);
     items.push(id);
@@ -1505,12 +1564,12 @@ function isDefinedItem(uri){
   return Boolean(node && node.out.length > 0) || sessionBnodes.has(uri);
 }
 
-function matchesClassFilter(uri){
-  if(kindFilter === 'classes') return isSubclassOrSelf(uri, classFilter, new Set());
-  if(kindFilter === 'dataproperties' || kindFilter === 'objectproperties') return hasDomain(uri, classFilter);
+function matchesClassFilter(uri, kind, klass){
+  if(kind === 'classes') return isSubclassOrSelf(uri, klass, new Set());
+  if(kind === 'dataproperties' || kind === 'objectproperties') return hasDomain(uri, klass);
   const node = model.nodes[uri];
   if(!node) return false;
-  return expandTypes(node.types).has(classFilter);
+  return expandTypes(node.types).has(klass);
 }
 
 // Typen inclusief hun rdfs:subClassOf-voorouders.
@@ -1633,7 +1692,7 @@ function renderDetail(){
   const cur = model.curie(uri);
   html += cur !== uri ? `<div class="uri">${esc(cur)} · ${esc(uri)}</div>` : `<div class="uri">${esc(uri)}</div>`;
 
-  const types = [...node.types].filter(t => !isCoreURI(t));
+  const types = [...node.types].filter(t => !isExcludedCore(t));
   if(types.length){
     html += `<div class="detail-heading" style="margin-bottom:18px;">
       <span class="detail-label-pred">klasse</span>
@@ -2335,7 +2394,7 @@ function addTripleValueRaw(subjectUri, predicateUri, objTerm){
     addIncoming(objTerm.value, predicateUri, subjectUri);
     if(predicateUri === RDF+'type') subjNode.types.add(objTerm.value);
   }
-  if(predicateUri !== RDF+'type' && !isCoreURI(predicateUri) && !(predicateUri in model.propKind)){
+  if(predicateUri !== RDF+'type' && !isExcludedCore(predicateUri) && !(predicateUri in model.propKind)){
     model.propKind[predicateUri] = objTerm.type === 'uri' ? 'relatie' : 'eigenschap';
     model.properties.push(predicateUri);
     model.properties.sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
@@ -2362,7 +2421,7 @@ function addTripleValue(subjectUri, predicateUri, objTerm){
 // Een klasse die nog niet in het model bekend was meetellen — net als bij het
 // laden, waar klassen uit de gebruikte rdf:type-waarden worden afgeleid.
 function registerClass(classUri){
-  if(isCoreURI(classUri) || model.classes.includes(classUri)) return;
+  if(isExcludedCore(classUri) || model.classes.includes(classUri)) return;
   model.classes.push(classUri);
   model.classes.sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
 }
@@ -3428,7 +3487,7 @@ function saveResourceTtl(){
   const removeIds = new Set([uri].concat(ttlEditConsumed));
   const kept = model.triples.filter(t => !removeIds.has(t.s.value));
   const prefixes = model.prefixes;
-  const rebuilt = buildModel({ prefixes, triples: kept.concat(parsed.triples) }, { useFilePrefixes: true });
+  const rebuilt = buildModel({ prefixes, triples: kept.concat(parsed.triples) }, { useFilePrefixes: true, keepCoreNamespaces });
   model = rebuilt;
   ttlEditConsumed.forEach(id => { sessionBnodes.delete(id); bnodeExpandOverride.delete(id); });
   rebuildOptions();
@@ -3448,6 +3507,99 @@ function openTtlPreview(){
 
 function closeTtlPreview(){
   document.getElementById('ttlPreviewOverlay').style.display = 'none';
+}
+
+/* ================= rapportage ================= */
+
+const REPORT_KINDS = [['individuals','Instanties'],['classes','Klassen'],['dataproperties','Eigenschappen'],['objectproperties','Relaties']];
+
+function reportKindOptions(selected){
+  return REPORT_KINDS.map(([v,l]) => `<option value="${v}"${v === selected ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
+
+function reportOrderedColumns(){
+  const report = window.LDEdit.report;
+  const defaults = report.defaultColumns(model);
+  const seen = new Set();
+  const out = [];
+  defaults.concat(report.predicatesInModel(model).sort((a,b) => model.curie(a).localeCompare(model.curie(b))))
+    .forEach(p => { if(!seen.has(p)){ seen.add(p); out.push(p); } });
+  return { columns: out, defaults: new Set(defaults) };
+}
+
+function selectedReportColumns(){
+  return [...document.querySelectorAll('#reportCols input:checked')].map(i => i.value);
+}
+
+function openReportDialog(){
+  if(!model) return;
+  renderReportBody();
+  document.getElementById('reportOverlay').style.display = 'flex';
+}
+
+function closeReportDialog(){
+  document.getElementById('reportOverlay').style.display = 'none';
+}
+
+function renderReportBody(){
+  const { columns, defaults } = reportOrderedColumns();
+  document.getElementById('reportBody').innerHTML = `
+    <div class="report-filters">
+      <div class="report-field">
+        <label for="reportKind">Soort</label>
+        <select id="reportKind">${reportKindOptions(kindFilter)}</select>
+      </div>
+      <div class="report-field">
+        <label for="reportKlasse">Klasse</label>
+        <select id="reportKlasse">${classFilterOptions()}</select>
+      </div>
+    </div>
+    <div class="report-cols-title">Kolommen</div>
+    <div class="report-cols" id="reportCols">
+      ${columns.map(p => `<label class="report-col"><input type="checkbox" value="${esc(p)}"${defaults.has(p) ? ' checked' : ''}> <span>${esc(model.curie(p))}<span class="rc-uri"> — ${esc(p)}</span></span></label>`).join('')}
+    </div>
+    <div class="report-count" id="reportCount"></div>`;
+  document.getElementById('reportKlasse').value = classFilter || '';
+  ['reportKind','reportKlasse'].forEach(id => document.getElementById(id).addEventListener('change', updateReportCount));
+  document.getElementById('reportCols').addEventListener('change', updateReportCount);
+  updateReportCount();
+}
+
+function updateReportCount(){
+  const kind = document.getElementById('reportKind').value;
+  const klass = document.getElementById('reportKlasse').value;
+  const items = itemsFor(kind, klass);
+  const cols = selectedReportColumns();
+  document.getElementById('reportCount').textContent =
+    items.length + ' rij' + (items.length === 1 ? '' : 'en') + ' · ' +
+    cols.length + ' kolom' + (cols.length === 1 ? '' : 'men');
+}
+
+function exportReport(){
+  if(!model) return;
+  const kind = document.getElementById('reportKind').value;
+  const klass = document.getElementById('reportKlasse').value;
+  const columns = selectedReportColumns();
+  const report = window.LDEdit.report;
+  const csv = report.toCsv(report.buildTable(model, itemsFor(kind, klass), columns));
+  const base = (fileNameEl.textContent || 'rapportage').replace(/\.(ttl|turtle|txt|shacl)$/i, '') || 'rapportage';
+  const suggested = base + '-rapportage.csv';
+
+  if(desktop()){
+    desktop().saveCsv(csv, suggested).then(res => {
+      if(res && res.saved) closeReportDialog();
+    }).catch(() => {});
+    return;
+  }
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = suggested;
+  document.body.appendChild(a);
+  a.click();
+  window.setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+  closeReportDialog();
 }
 
 function downloadTurtle(){ saveTurtle(false); }
@@ -3524,6 +3676,14 @@ document.getElementById('ttlPreviewOverlay').addEventListener('click', e => {
   if(e.target.id === 'ttlPreviewOverlay') closeTtlPreview();
 });
 document.addEventListener('ldedit-ttl-preview', openTtlPreview);
+
+// Rapportage
+document.getElementById('reportExportBtn').addEventListener('click', exportReport);
+document.getElementById('reportCancelBtn').addEventListener('click', closeReportDialog);
+document.getElementById('reportOverlay').addEventListener('click', e => {
+  if(e.target.id === 'reportOverlay') closeReportDialog();
+});
+document.addEventListener('ldedit-report', openReportDialog);
 document.getElementById('createModalBody').addEventListener('keydown', e => {
   if(e.key === 'Enter' && e.target.tagName !== 'BUTTON'){ e.preventDefault(); submitCreate(); }
   else if(e.key === 'Escape'){ e.preventDefault(); closeCreateModal(); }
@@ -3533,7 +3693,7 @@ document.getElementById('emptyStateNewModelBtn').addEventListener('click', (e) =
 // Val terug op het startscherm wanneer het bestand bij het starten niet geopend kon worden.
 document.addEventListener('ldedit-show-start', () => { if(!model) showStartScreen(); });
 
-// Bundels: modal-bediening
+// Modeltypes: modal-bediening
 document.getElementById('shapesBtn').addEventListener('click', openShapesManager);
 document.getElementById('shapesCancelBtn').addEventListener('click', closeShapesManager);
 document.getElementById('shapesOverlay').addEventListener('click', e => {
@@ -3547,6 +3707,15 @@ document.getElementById('shapesOverlay').addEventListener('click', e => {
     if(startupFile) showOpeningScreen();
     try { defaultPrefixName = (await desktop().getDefaultPrefix()) || ''; } catch(err) { defaultPrefixName = ''; }
     await initShapes();
+    // Een bestand dat tijdens het opstarten al geopend is, kan gerenderd zijn
+    // voordat de modeltypes bekend waren. Nu alsnog de klassen/eigenschappen met
+    // de juiste namespaces afleiden en de zijbalk opnieuw tekenen.
+    if(model){
+      refreshKeepCoreNamespaces();
+      model = buildModel({ prefixes: model.prefixes, triples: model.triples }, { useFilePrefixes: true, keepCoreNamespaces });
+      rebuildOptions();
+      renderApp();
+    }
     // Niet het startscherm tonen als er al een bestand is geopend of wordt geopend.
     if(!model && !startupFile) showStartScreen();
   } else {
