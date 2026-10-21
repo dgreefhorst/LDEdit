@@ -342,6 +342,38 @@
   .rel-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .rel-wrap.invalid{background:#fbe9e7;border-radius:2px;padding:2px 6px;margin:-2px -6px;}
 
+  /* Inline blanco node */
+  .bnode-block{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .bnode-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .bnode-toggle{
+    border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);
+    width:18px;height:18px;line-height:1;border-radius:2px;cursor:pointer;
+    font-size:9px;padding:0;flex-shrink:0;font-family:var(--sans);
+  }
+  .bnode-toggle:hover{border-color:var(--accent);color:var(--accent);}
+  .bnode-ref{font-size:11px;color:var(--ink-soft);font-family:var(--mono);flex-shrink:0;}
+  .bnode-body{
+    margin-left:9px;padding:2px 0 2px 12px;border-left:2px solid var(--line);
+    display:flex;flex-direction:column;gap:6px;min-width:0;
+  }
+  .bnode-body .prop-table{border-top:none;}
+  .bnode-body .prop-row{padding:8px 0;gap:14px;border-bottom:1px solid var(--line);}
+  .bnode-body .prop-row:last-child{border-bottom:none;}
+  .bnode-body .prop-row .pname{width:150px;}
+  .bnode-body .add-prop-btn{margin-top:2px;align-self:flex-start;}
+  .rdf-list{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:13px;}
+  .rdf-list .rdf-list-sep{color:var(--ink-soft);font-family:var(--mono);}
+  .rdf-list .rdf-list-empty{color:var(--ink-soft);font-family:var(--mono);}
+  .rdf-list .rdf-item{display:inline-flex;align-items:flex-start;gap:4px;}
+  .rdf-list .rdf-item .bnode-block{flex:1;min-width:0;}
+  .rdf-item-btn{
+    border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);
+    border-radius:2px;cursor:pointer;font-size:11px;line-height:1;padding:2px 5px;
+    font-family:var(--sans);flex-shrink:0;
+  }
+  .rdf-item-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .rdf-list .rdf-item-add{font-weight:600;}
+
   .edit-hint{font-size:12px;color:var(--ink-soft);margin:-14px 0 22px;}
 
   .rel-edit-btn{
@@ -650,6 +682,7 @@
 
 <script src="js/turtle.js"></script>
 <script src="js/model.js"></script>
+<script src="js/serialize.js"></script>
 <script src="js/shacl.js"></script>
 <script>
 (function(){
@@ -682,6 +715,9 @@ let hasUnsavedChanges = false;
 // uitspraken en zouden dus buiten de lijst vallen. Onthoud ze, zodat ze in de
 // lijst staan om aan te vullen.
 const sessionBnodes = new Set();
+// Of een blanco node inline is uitgeklapt: expliciete keuze per id. Zonder
+// expliciete keuze staat een bnode op het eerste niveau open en dieper dicht.
+const bnodeExpandOverride = new Map();
 let lastScrollTop = 0;
 let prefixWorking = [];
 let defaultPrefixName = '';
@@ -698,6 +734,9 @@ let currentEditableTerms = [];
 let currentEditableLangs = [];
 let currentEditableRels = [];
 let currentDeletables = [];
+// Contexten voor het toevoegen aan en verwijderen uit een RDF-collectie.
+let currentListContexts = [];
+let currentListItemRemovals = [];
 
 /* ================= helpers ================= */
 
@@ -1107,6 +1146,7 @@ async function loadFile(file){
   try{
     model = buildModel(parseTurtle(stripBOM(text)), { useFilePrefixes: true });
     sessionBnodes.clear();
+    bnodeExpandOverride.clear();
     selectedId = null;
     searchQuery = '';
     classFilter = '';
@@ -1222,6 +1262,7 @@ function renderNewModelForm(){
 function createNewModel(prefix, namespace, filename){
   model = buildModel({ prefixes: { [prefix]: namespace }, triples: [] });
   sessionBnodes.clear();
+  bnodeExpandOverride.clear();
   selectedId = null;
   searchQuery = '';
   classFilter = '';
@@ -1508,6 +1549,8 @@ function renderDetail(){
   currentEditableLangs = [];
   currentEditableRels = [];
   currentDeletables = [];
+  currentListContexts = [];
+  currentListItemRemovals = [];
   if(!selectedId){
     detailEl.innerHTML = '<div class="detail-empty">Selecteer een item in de lijst.<br>Waarden zijn direct te bewerken; overtredingen van de SHACL-shapes worden gemarkeerd.</div>';
     return;
@@ -1581,24 +1624,9 @@ function renderDetail(){
     html += '<div class="prop-table"><div class="prop-row"><div class="pname">—</div><div class="pvals">' + messagesHtml(nodeLevel) + '</div></div></div>';
   }
 
-  const grouped = {};
-  node.out.forEach(({p,o}) => { (grouped[p] = grouped[p] || []).push(o); });
-  const predKeys = Object.keys(grouped).sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
-  if(predKeys.length){
+  if(node.out.length){
     html += '<div class="prop-table">';
-    predKeys.forEach(p => {
-      const pathRes = byPath[p] || [];
-      const invalid = pathRes.some(r => r.severity !== 'info');
-      html += `<div class="prop-row ${invalid ? 'invalid' : ''}">
-        <div class="pname">${esc(rawLabelOf(p))}<span class="puri">${esc(curieOf(p))}</span></div>
-        <div class="pvals">`;
-      grouped[p].forEach(o => {
-        const vres = pathRes.filter(r => r.value && SHACL.sameTerm(r.value, o));
-        html += valHtml(o, true, uri, p, vres.length > 0);
-      });
-      if(pathRes.length) html += messagesHtml(pathRes);
-      html += '</div></div>';
-    });
+    html += outRowsHtml(uri, byPath, true, { depth:0, stack:[] });
     html += '</div>';
   }
 
@@ -1617,7 +1645,7 @@ function renderDetail(){
     html += '</div>';
   }
 
-  html += `<button type="button" class="btn add-prop-btn" id="addPropBtn">+ Eigenschap of relatie toevoegen</button>`;
+  html += `<button type="button" class="btn add-prop-btn" id="addPropBtn" data-subject="${esc(uri)}">+ Eigenschap of relatie toevoegen</button>`;
   html += `<div><button type="button" class="danger-btn" id="deleteResourceBtn">Verwijder deze ${esc(kind.toLowerCase())}</button></div>`;
 
   detailEl.innerHTML = html;
@@ -1645,14 +1673,32 @@ function attachDetailListeners(detailEl, uri){
   detailEl.querySelectorAll('.val-delete-btn').forEach(el => {
     el.addEventListener('click', () => {
       const info = currentDeletables[parseInt(el.dataset.delidx, 10)];
-      if(info) deleteTripleValue(info.subjectUri, info.predicateUri, info.term);
+      if(info) deleteValueEntry(info);
     });
+  });
+  detailEl.querySelectorAll('.bnode-toggle').forEach(el => {
+    el.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      bnodeExpandOverride.set(el.dataset.bnode, el.dataset.expanded !== '1');
+      lastScrollTop = detailEl.scrollTop;
+      renderDetail();
+    });
+  });
+  detailEl.querySelectorAll('.rdf-item-remove').forEach(el => {
+    el.addEventListener('click', () => {
+      const info = currentListItemRemovals[parseInt(el.dataset.lidx, 10)];
+      if(info) removeListItemEntry(info);
+    });
+  });
+  detailEl.querySelectorAll('.rdf-item-add').forEach(el => {
+    el.addEventListener('click', () => openAddListItemForm(parseInt(el.dataset.lidx, 10), el));
   });
   detailEl.querySelectorAll('.missing-add').forEach(el => {
     el.addEventListener('click', () => openAddPropertyForm(uri, el.dataset.path));
   });
-  const addBtn = detailEl.querySelector('#addPropBtn');
-  if(addBtn) addBtn.addEventListener('click', () => openAddPropertyForm(uri));
+  detailEl.querySelectorAll('.add-prop-btn').forEach(el => {
+    el.addEventListener('click', () => openAddPropertyForm(el.dataset.subject || uri, null, el));
+  });
   const delResBtn = detailEl.querySelector('#deleteResourceBtn');
   if(delResBtn) delResBtn.addEventListener('click', () => {
     const kind = kindLabelFor(uri);
@@ -1711,7 +1757,33 @@ function updateDownloadState(){
 
 /* ================= waarde-weergave ================= */
 
-function valHtml(term, editable, subjectUri, predicateUri, invalid){
+// Predicaat-rijen van één subject. Herbruikt voor de resource zelf en voor
+// inline uitgeklapte blanco nodes.
+function outRowsHtml(subjectUri, byPath, editable, ctx){
+  const node = model.nodes[subjectUri];
+  if(!node) return '';
+  const grouped = {};
+  node.out.forEach(({p,o}) => { (grouped[p] = grouped[p] || []).push(o); });
+  const predKeys = Object.keys(grouped).sort((a,b) => labelOf(a).localeCompare(labelOf(b)));
+  let html = '';
+  predKeys.forEach(p => {
+    const pathRes = byPath[p] || [];
+    const invalid = pathRes.some(r => r.severity !== 'info');
+    html += `<div class="prop-row ${invalid ? 'invalid' : ''}">
+      <div class="pname">${esc(rawLabelOf(p))}<span class="puri">${esc(curieOf(p))}</span></div>
+      <div class="pvals">`;
+    grouped[p].forEach(o => {
+      const vres = pathRes.filter(r => r.value && SHACL.sameTerm(r.value, o));
+      html += valHtml(o, editable, subjectUri, p, vres.length > 0, ctx);
+    });
+    if(pathRes.length) html += messagesHtml(pathRes);
+    html += '</div></div>';
+  });
+  return html;
+}
+
+function valHtml(term, editable, subjectUri, predicateUri, invalid, ctx){
+  ctx = ctx || { depth:0, stack:[] };
   if(term.type === 'literal'){
     let extra = '';
     // Een taal-tag maakt van de literal een rdf:langString; als de shape een
@@ -1736,25 +1808,154 @@ function valHtml(term, editable, subjectUri, predicateUri, invalid){
     if(editable){
       const idx = currentEditableTerms.length;
       currentEditableTerms.push(term);
-      const delIdx = currentDeletables.length;
-      currentDeletables.push({ term, subjectUri, predicateUri });
-      return `<div class="pval-wrap ${invalid ? 'invalid' : ''}"><div class="${valClass} pval-editable" contenteditable="true" spellcheck="false" data-eidx="${idx}">${esc(term.value)}</div>${extra}<button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze waarde">×</button></div>`;
+      let delBtn = '';
+      if(!ctx.noDelete){
+        const delIdx = currentDeletables.length;
+        currentDeletables.push({ term, subjectUri, predicateUri, mode:'triple' });
+        delBtn = `<button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze waarde">×</button>`;
+      }
+      return `<div class="pval-wrap ${invalid ? 'invalid' : ''}"><div class="${valClass} pval-editable" contenteditable="true" spellcheck="false" data-eidx="${idx}">${esc(term.value)}</div>${extra}${delBtn}</div>`;
     }
     return `<div class="${valClass}">${esc(term.value)}${extra}</div>`;
   }
   const uri = term.value;
-  const isBnode = term.type === 'bnode';
-  const bnodeLabel = isBnode ? 'blanco node' : labelOf(uri);
-  const bnodeSub = isBnode ? uri : curieOf(uri);
-  const linkHtml = `<a class="pval-link" data-uri="${esc(uri)}">${esc(bnodeLabel)}<span class="pv-uri">${esc(bnodeSub)}</span></a>`;
-  if(editable && term.type !== 'literal'){
+  if(term.type === 'bnode'){
+    if(!editable) return bnodeLinkHtml(uri);
+    if(isListHead(uri)) return listValueHtml(term, subjectUri, predicateUri, ctx);
+    return bnodeValueHtml(term, subjectUri, predicateUri, ctx);
+  }
+  const linkHtml = `<a class="pval-link" data-uri="${esc(uri)}">${esc(labelOf(uri))}<span class="pv-uri">${esc(curieOf(uri))}</span></a>`;
+  if(editable){
     const relIdx = currentEditableRels.length;
     currentEditableRels.push({ term, subjectUri, predicateUri });
     const delIdx = currentDeletables.length;
-    currentDeletables.push({ term, subjectUri, predicateUri });
+    currentDeletables.push({ term, subjectUri, predicateUri, mode:'triple' });
     return `<div class="rel-wrap ${invalid ? 'invalid' : ''}" data-relidx="${relIdx}">${linkHtml}<button type="button" class="rel-edit-btn" data-relidx="${relIdx}" title="Wijzig verwijzing">✎</button><button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze relatie">×</button></div>`;
   }
   return linkHtml;
+}
+
+function bnodeLinkHtml(bnodeId){
+  return `<a class="pval-link" data-uri="${esc(bnodeId)}">blanco node<span class="pv-uri">${esc(bnodeId)}</span></a>`;
+}
+
+// Is dit knooppunt het hoofd van een RDF-collectie (rdf:first/rdf:rest)?
+function isListHead(uri){
+  const node = model.nodes[uri];
+  return Boolean(node && node.out.some(e => e.p === RDF+'first'));
+}
+
+// De keten-id's van een RDF-collectie, beginnend bij het hoofd.
+function listChainIds(headUri){
+  const ids = [];
+  const seen = new Set();
+  let cur = headUri;
+  while(cur && cur !== RDF+'nil' && !seen.has(cur)){
+    seen.add(cur);
+    ids.push(cur);
+    const node = model.nodes[cur];
+    if(!node) break;
+    const rest = node.out.find(e => e.p === RDF+'rest');
+    cur = (rest && (rest.o.type === 'uri' || rest.o.type === 'bnode')) ? rest.o.value : null;
+  }
+  return ids;
+}
+
+function listItems(headUri){
+  const out = [];
+  listChainIds(headUri).forEach(id => {
+    const node = model.nodes[id];
+    const first = node && node.out.find(e => e.p === RDF+'first');
+    if(first) out.push({ term:first.o, ownerUri:id });
+  });
+  return out;
+}
+
+function listItemHtml(item, ctx){
+  const term = item.term;
+  if(term.type === 'literal'){
+    // Tekst van een lijstitem is te wijzigen; het item zelf verwijder je met de
+    // × van het item (die de keten netjes herschakelt), niet met een eigen ×.
+    return valHtml(term, true, item.ownerUri, RDF+'first', false, { depth:ctx.depth, stack:ctx.stack, noDelete:true });
+  }
+  if(term.type === 'bnode'){
+    if(isListHead(term.value)) return listValueHtml(term, item.ownerUri, RDF+'first', ctx);
+    return bnodeValueHtml(term, item.ownerUri, RDF+'first', { depth:ctx.depth, stack:ctx.stack, inListItem:true });
+  }
+  return `<a class="pval-link" data-uri="${esc(term.value)}">${esc(labelOf(term.value))}<span class="pv-uri">${esc(curieOf(term.value))}</span></a>`;
+}
+
+// RDF-collectie: de rdf:first/rdf:rest-structuur tonen we niet; de items wel,
+// elk met een × om ze uit de lijst te halen, plus een + om een item toe te voegen.
+function listValueHtml(term, subjectUri, predicateUri, ctx){
+  const headUri = term.value;
+  const chain = listChainIds(headUri);
+  const items = listItems(headUri);
+  const delIdx = currentDeletables.length;
+  currentDeletables.push({ term, subjectUri, predicateUri, mode:'list' });
+  const addIdx = currentListContexts.length;
+  currentListContexts.push({ headUri, subjectUri, predicateUri, headTerm: term });
+  const innerStack = ctx.stack.concat(chain);
+  const inner = items.length
+    ? items.map(it => {
+        const rIdx = currentListItemRemovals.length;
+        currentListItemRemovals.push({ headUri, subjectUri, predicateUri, headTerm: term, ownerUri: it.ownerUri });
+        const value = listItemHtml(it, { depth:ctx.depth, stack:innerStack });
+        return `<span class="rdf-item">${value}<button type="button" class="rdf-item-btn rdf-item-remove" data-lidx="${rIdx}" title="Dit item uit de lijst halen">×</button></span>`;
+      }).join('<span class="rdf-list-sep">,</span>')
+    : '<span class="rdf-list-empty">leeg</span>';
+  return `<div class="rel-wrap">
+    <span class="rdf-list"><span class="rdf-list-sep">(</span>${inner}<span class="rdf-list-sep">)</span></span>
+    <button type="button" class="rdf-item-btn rdf-item-add" data-lidx="${addIdx}" title="Item toevoegen">+</button>
+    <button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze lijst">×</button>
+  </div>`;
+}
+
+// Een blanco node als waarde, optioneel inline uitgeklapt en bewerkbaar.
+function bnodeValueHtml(term, subjectUri, predicateUri, ctx){
+  const bnodeId = term.value;
+  const inStack = ctx.stack.indexOf(bnodeId) !== -1;
+  const expanded = !inStack && bnodeIsExpanded(bnodeId, ctx.depth + 1);
+  const relIdx = currentEditableRels.length;
+  currentEditableRels.push({ term, subjectUri, predicateUri });
+  const delIdx = currentDeletables.length;
+  // In een RDF-collectie regelt het item zelf het verwijderen (met herschakelen
+  // van de keten), dus daar geen eigen × op de blanco node.
+  const ownDelete = !ctx.inListItem;
+  if(ownDelete) currentDeletables.push({ term, subjectUri, predicateUri, mode:'bnode' });
+
+  const toggle = inStack
+    ? `<span class="bnode-ref" title="Verwijst terug naar een bovenliggende blanco node">↩</span>`
+    : `<button type="button" class="bnode-toggle" data-bnode="${esc(bnodeId)}" data-expanded="${expanded ? '1' : '0'}" title="${expanded ? 'Inklappen' : 'Uitklappen'}">${expanded ? '▾' : '▸'}</button>`;
+
+  let html = `<div class="bnode-block">
+    <div class="bnode-head rel-wrap" data-relidx="${relIdx}">${toggle}${bnodeLinkHtml(bnodeId)}
+      <button type="button" class="rel-edit-btn" data-relidx="${relIdx}" title="Wijzig verwijzing">✎</button>
+      ${ownDelete ? `<button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze blanco node en zijn eigenschappen">×</button>` : ''}
+    </div>`;
+
+  if(expanded){
+    const node = model.nodes[bnodeId];
+    const bnodeByPath = {};
+    resultsFor(bnodeId).forEach(r => { if(r.path) (bnodeByPath[r.path] = bnodeByPath[r.path] || []).push(r); });
+    html += '<div class="bnode-body">';
+    if(node && node.out.length){
+      html += '<div class="prop-table">';
+      html += outRowsHtml(bnodeId, bnodeByPath, true, { depth: ctx.depth + 1, stack: ctx.stack.concat([bnodeId]) });
+      html += '</div>';
+    } else {
+      html += '<div class="rdf-list-empty">Nog geen eigenschappen.</div>';
+    }
+    html += `<button type="button" class="btn add-prop-btn" data-subject="${esc(bnodeId)}">+ Eigenschap of relatie toevoegen</button>`;
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function bnodeIsExpanded(bnodeId, depth){
+  if(bnodeExpandOverride.has(bnodeId)) return bnodeExpandOverride.get(bnodeId);
+  return depth <= 1;
 }
 
 /* ================= navigatie ================= */
@@ -1879,10 +2080,15 @@ function commitRelation(relIdx, newUri){
   const term = info.term;
   const oldUri = term.value;
   if(newUri !== oldUri){
-    removeIncoming(oldUri, info.predicateUri, info.subjectUri);
-    term.value = newUri;
-    term.type = (model.nodes[newUri] && model.nodes[newUri].isBnode) ? 'bnode' : 'uri';
-    addIncoming(newUri, info.predicateUri, info.subjectUri);
+    // Nieuw term-object in plaats van in place muteren: hetzelfde object kan
+    // ook als subject gebruikt worden (bij `[ … ]` en collecties).
+    const type = (model.nodes[newUri] && model.nodes[newUri].isBnode) ? 'bnode' : 'uri';
+    rawReplaceObject(info.subjectUri, info.predicateUri, term, { type, value: newUri });
+    // Een blanco node die hierdoor nergens meer naar verwijst, verdwijnt mee.
+    if(term.type === 'bnode' && model.nodes[term.value] && model.nodes[term.value].in.length === 0){
+      deleteResource(term.value);
+      bnodeExpandOverride.delete(term.value);
+    }
     hasUnsavedChanges = true;
     markValidationStale();
     updateDownloadState();
@@ -1911,6 +2117,151 @@ function deleteTripleValue(subjectUri, predicateUri, term){
   updateDownloadState();
   updateStatus();
   renderApp();
+}
+
+// Boekhouding na een mutatie: markeer als gewijzigd, validatie opnieuw, herteken.
+function afterMutation(){
+  hasUnsavedChanges = true;
+  markValidationStale();
+  updateDownloadState();
+  updateStatus();
+  renderApp();
+}
+
+// Verwijdert één triple (op object-identiteit) zonder boekhouding of hertekenen;
+// gebruikt bij het herschakelen van een RDF-collectie.
+function rawRemoveTriple(subjectUri, predicateUri, term){
+  const i = model.triples.findIndex(t => t.o === term && t.s.value === subjectUri && t.p.value === predicateUri);
+  if(i >= 0) model.triples.splice(i, 1);
+  const node = model.nodes[subjectUri];
+  if(node){
+    const j = node.out.findIndex(e => e.o === term && e.p === predicateUri);
+    if(j >= 0) node.out.splice(j, 1);
+  }
+  if(term.type === 'uri' || term.type === 'bnode') removeIncoming(term.value, predicateUri, subjectUri);
+}
+
+// Vervangt de objectwaarde van een triple door een nieuw term-object. Term-
+// objecten kunnen gedeeld zijn tussen de subject- en de objectrol (zoals bij
+// `[ … ]` en RDF-collecties), dus nooit in place muteren.
+function rawReplaceObject(subjectUri, predicateUri, oldTerm, newTerm){
+  model.triples.forEach(t => {
+    if(t.s.value === subjectUri && t.p.value === predicateUri && t.o === oldTerm) t.o = newTerm;
+  });
+  const node = model.nodes[subjectUri];
+  if(node) node.out.forEach(e => { if(e.p === predicateUri && e.o === oldTerm) e.o = newTerm; });
+  if(oldTerm.type === 'uri' || oldTerm.type === 'bnode') removeIncoming(oldTerm.value, predicateUri, subjectUri);
+  if(newTerm.type === 'uri' || newTerm.type === 'bnode') addIncoming(newTerm.value, predicateUri, subjectUri);
+}
+
+// Plakt een item achteraan een RDF-collectie. `makeItem` levert de waarde
+// (literal/uri/bnode); bij een nieuwe blanco node wordt die pas gemaakt nadat
+// het nieuwe ketenknooppunt bestaat, zodat de id's niet botsen.
+function appendListItem(ctx, makeItem){
+  const chain = listChainIds(ctx.headUri);
+  const last = chain.length ? chain[chain.length - 1] : ctx.headUri;
+  const lastNode = model.nodes[last];
+  const restEntry = lastNode && lastNode.out.find(e => e.p === RDF+'rest');
+  if(restEntry && restEntry.o.value === RDF+'nil') rawRemoveTriple(last, RDF+'rest', restEntry.o);
+
+  const chainId = nextBnodeId();
+  addTripleValueRaw(last, RDF+'rest', { type:'bnode', value: chainId });
+  addTripleValueRaw(chainId, RDF+'rest', { type:'uri', value: RDF+'nil' });
+
+  const itemTerm = (typeof makeItem === 'function') ? makeItem() : makeItem;
+  addTripleValueRaw(chainId, RDF+'first', itemTerm);
+  sessionBnodes.add(chainId);
+  bnodeExpandOverride.set(chainId, true);
+}
+
+// Haalt één item uit een RDF-collectie en herschakelt de rdf:rest-keten.
+function removeListItemEntry(info){
+  if(!info) return;
+  const { headUri, subjectUri, predicateUri, headTerm, ownerUri } = info;
+  const chain = listChainIds(headUri);
+  const idx = chain.indexOf(ownerUri);
+  if(idx === -1){ renderDetail(); return; }
+
+  const node = model.nodes[ownerUri];
+  const firstEntry = node && node.out.find(e => e.p === RDF+'first');
+  const restEntry = node && node.out.find(e => e.p === RDF+'rest');
+  const itemTerm = firstEntry ? firstEntry.o : null;
+  const nextTerm = (restEntry && (restEntry.o.type === 'uri' || restEntry.o.type === 'bnode'))
+    ? { type: restEntry.o.type, value: restEntry.o.value }
+    : { type: 'uri', value: RDF+'nil' };
+
+  if(chain.length === 1){
+    // Laatste item: de verwijzing naar de lijst verdwijnt in zijn geheel.
+    rawRemoveTriple(subjectUri, predicateUri, headTerm);
+  } else if(idx === 0){
+    // Het hoofd vervalt: het predicaat verwijst naar het volgende knooppunt.
+    rawReplaceObject(subjectUri, predicateUri, headTerm, { type: nextTerm.type, value: nextTerm.value });
+    bnodeExpandOverride.delete(headUri);
+  } else {
+    const pred = chain[idx - 1];
+    const predNode = model.nodes[pred];
+    const predRest = predNode && predNode.out.find(e => e.p === RDF+'rest');
+    if(predRest){
+      rawRemoveTriple(pred, RDF+'rest', predRest.o);
+      addTripleValueRaw(pred, RDF+'rest', nextTerm);
+    }
+  }
+
+  if(firstEntry) rawRemoveTriple(ownerUri, RDF+'first', firstEntry.o);
+  if(restEntry) rawRemoveTriple(ownerUri, RDF+'rest', restEntry.o);
+  delete model.nodes[ownerUri];
+  sessionBnodes.delete(ownerUri);
+  bnodeExpandOverride.delete(ownerUri);
+
+  // Een blanco node die nu nergens meer naar verwijst, verdwijnt mee.
+  if(itemTerm && itemTerm.type === 'bnode' && model.nodes[itemTerm.value] && model.nodes[itemTerm.value].in.length === 0){
+    deleteResource(itemTerm.value);
+    bnodeExpandOverride.delete(itemTerm.value);
+  }
+  afterMutation();
+}
+
+// Verwijdert een complete RDF-collectie: alle knooppunten van de rdf:rest-keten
+// (het hoofd inbegrepen) plus de triples waarin ze voorkomen — dus ook de link
+// vanuit de resource die de lijst gebruikte. Geeft de verwijderde id's terug.
+function deleteCollection(headUri){
+  const ids = new Set(listChainIds(headUri));
+  if(!ids.size) return [];
+  model.triples = model.triples.filter(t =>
+    !(t.s.type !== 'literal' && ids.has(t.s.value)) &&
+    !(t.o.type !== 'literal' && ids.has(t.o.value))
+  );
+  Object.keys(model.nodes).forEach(k => {
+    const n = model.nodes[k];
+    n.out = n.out.filter(e => !(e.o.type !== 'literal' && ids.has(e.o.value)));
+    n.in = n.in.filter(e => !(e.s.type !== 'literal' && ids.has(e.s.value)));
+  });
+  ids.forEach(id => { delete model.nodes[id]; sessionBnodes.delete(id); });
+  model.individuals = model.individuals.filter(u => !ids.has(u));
+  return [...ids];
+}
+
+// Verwijdert een waarde. Een gewone triple verdwijnt uit het model; bij een
+// blanco node gaat de hele node (met zijn eigenschappen) weg; bij een RDF-lijst
+// de hele keten.
+function deleteValueEntry(info){
+  if(!info) return;
+  if(info.mode === 'bnode'){
+    const bnodeId = info.term.value;
+    deleteResource(bnodeId);
+    bnodeExpandOverride.delete(bnodeId);
+    if(selectedId === bnodeId) selectedId = null;
+    afterMutation();
+    return;
+  }
+  if(info.mode === 'list'){
+    const ids = deleteCollection(info.term.value);
+    ids.forEach(id => bnodeExpandOverride.delete(id));
+    if(selectedId && ids.indexOf(selectedId) !== -1) selectedId = null;
+    afterMutation();
+    return;
+  }
+  deleteTripleValue(info.subjectUri, info.predicateUri, info.term);
 }
 
 function refreshResourceOptionsFor(u){
@@ -1955,7 +2306,9 @@ function addTripleValue(subjectUri, predicateUri, objTerm){
   markValidationStale();
   updateDownloadState();
   updateStatus();
-  selectedId = subjectUri;
+  // Bij een inline bewerkte blanco node de huidige selectie laten staan; anders
+  // zou het toevoegen van een eigenschap je naar die node laten verspringen.
+  if(subjectUri.indexOf('_:') !== 0) selectedId = subjectUri;
   const detailEl = document.getElementById('detailEl');
   lastScrollTop = detailEl ? detailEl.scrollTop : 0;
   renderApp();
@@ -2542,9 +2895,9 @@ function renderOptionList(listEl, options, query, onPick, prioritySet, initialOp
 
 /* ================= eigenschap toevoegen (met verplichte suggesties) ================= */
 
-function openAddPropertyForm(subjectUri, prefillPredUri){
+function openAddPropertyForm(subjectUri, prefillPredUri, triggerEl){
   const detailEl = document.getElementById('detailEl');
-  const btn = detailEl.querySelector('#addPropBtn');
+  const btn = triggerEl || detailEl.querySelector('#addPropBtn');
   if(!btn) return;
 
   const required = requiredMissingFor(subjectUri);
@@ -2800,6 +3153,86 @@ function openAddPropertyForm(subjectUri, prefillPredUri){
   predInput.focus();
 }
 
+/* ================= item toevoegen aan een RDF-collectie ================= */
+
+function openAddListItemForm(ctxIdx, triggerEl){
+  const ctx = currentListContexts[ctxIdx];
+  if(!ctx || !triggerEl) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'add-prop-form rdf-item-form';
+  wrap.innerHTML = `
+    <div class="add-prop-row add-prop-kind-row">
+      <label><input type="radio" name="listItemKind" value="bnode" checked> Blanco node</label>
+      <label><input type="radio" name="listItemKind" value="literal"> Vaste waarde</label>
+      <label><input type="radio" name="listItemKind" value="relatie"> Verwijzing</label>
+    </div>
+    <div class="add-prop-row rdf-item-value-area"></div>
+    <div class="add-prop-error"></div>
+    <div class="add-prop-actions">
+      <button type="button" class="btn primary rdf-item-submit">Toevoegen</button>
+      <button type="button" class="rel-picker-cancel rdf-item-cancel">Annuleren</button>
+    </div>`;
+  triggerEl.replaceWith(wrap);
+
+  const valueArea = wrap.querySelector('.rdf-item-value-area');
+  const errorEl = wrap.querySelector('.add-prop-error');
+  let chosenTargetUri = null;
+
+  function renderArea(kind){
+    if(kind === 'literal'){
+      chosenTargetUri = null;
+      valueArea.innerHTML = `
+        <div class="add-prop-value-row">
+          <input type="text" class="rdf-item-literal" placeholder="Waarde">
+          <input type="text" class="rdf-item-lang" placeholder="taal (optioneel)" title="Taal van de tekst, bv. nl" spellcheck="false">
+        </div>`;
+    } else if(kind === 'relatie'){
+      chosenTargetUri = null;
+      valueArea.innerHTML = `
+        <input type="text" class="add-prop-target-input" placeholder="Zoek op naam, of plak URI of verkorte naam…" autocomplete="off">
+        <div class="rel-picker-list add-prop-target-list"></div>`;
+      const ti = valueArea.querySelector('.add-prop-target-input');
+      const tl = valueArea.querySelector('.add-prop-target-list');
+      ti.addEventListener('input', () => {
+        chosenTargetUri = null;
+        renderOptionList(tl, allResourceOptions, ti.value, (u) => { chosenTargetUri = u; ti.value = labelOf(u); tl.innerHTML = ''; });
+      });
+    } else {
+      chosenTargetUri = null;
+      valueArea.innerHTML = '<div class="rel-option-empty">Er wordt een nieuwe blanco node als item toegevoegd.</div>';
+    }
+  }
+  renderArea('bnode');
+  wrap.querySelectorAll('input[name="listItemKind"]').forEach(r => {
+    r.addEventListener('change', () => renderArea(r.value));
+  });
+
+  wrap.querySelector('.rdf-item-cancel').addEventListener('click', () => renderDetail());
+  wrap.querySelector('.rdf-item-submit').addEventListener('click', () => {
+    errorEl.textContent = '';
+    const kind = wrap.querySelector('input[name="listItemKind"]:checked').value;
+    if(kind === 'bnode'){
+      appendListItem(ctx, () => ({ type:'bnode', value: nextBnodeId() }));
+    } else if(kind === 'literal'){
+      const v = wrap.querySelector('.rdf-item-literal').value;
+      if(!v.trim()){ errorEl.textContent = 'Vul een waarde in.'; return; }
+      const lang = wrap.querySelector('.rdf-item-lang').value.trim();
+      appendListItem(ctx, lang ? { type:'literal', value:v, lang } : { type:'literal', value:v, datatype: XSD+'string' });
+    } else {
+      const ti = wrap.querySelector('.add-prop-target-input');
+      const uri = chosenTargetUri || resolveTypedInput(ti ? ti.value : '');
+      if(!uri){ errorEl.textContent = 'Kies een resource, of plak een geldige URI of verkorte naam.'; return; }
+      const tn = model.nodes[uri];
+      appendListItem(ctx, (tn && tn.isBnode) ? { type:'bnode', value:uri } : { type:'uri', value:uri });
+    }
+    afterMutation();
+  });
+
+  const first = wrap.querySelector('input[name="listItemKind"]');
+  if(first) first.focus();
+}
+
 /* ================= prefixen ================= */
 
 function rebuildOptions(){
@@ -2903,62 +3336,8 @@ function suggestCurieFromLabel(label){
   return prefix ? prefix + ':' + slug : slug;
 }
 
-function escapeLiteralBody(v){ return v.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
-function literalToTurtle(term){
-  const v = term.value;
-  let body;
-  if(v.indexOf('\n') >= 0 || v.indexOf('"') >= 0){
-    body = '"""' + v.replace(/\\/g,'\\\\').replace(/"""/g,'\\"\\"\\"') + '"""';
-  } else {
-    body = '"' + escapeLiteralBody(v) + '"';
-  }
-  if(term.lang) return body + '@' + term.lang;
-  if(term.datatype && term.datatype !== XSD+'string') return body + '^^' + uriToTurtle(term.datatype);
-  return body;
-}
-const SAFE_PN_LOCAL = /^[A-Za-z0-9_][A-Za-z0-9_.\-]*[A-Za-z0-9_\-]$|^[A-Za-z0-9_]$/;
-function uriToTurtle(uri){
-  const c = model.curie(uri);
-  if(c === uri) return '<' + uri + '>';
-  const local = c.slice(c.indexOf(':') + 1);
-  if(local.length > 0 && SAFE_PN_LOCAL.test(local)) return c;
-  return '<' + uri + '>';
-}
-function termToTurtle(term, isPredicate){
-  if(term.type === 'uri'){
-    if(isPredicate && term.value === RDF+'type') return 'a';
-    return uriToTurtle(term.value);
-  }
-  if(term.type === 'bnode') return term.value;
-  return literalToTurtle(term);
-}
-
-function serializeTurtle(){
-  const prefixes = model.prefixes;
-  let out = '';
-  Object.keys(prefixes).sort().forEach(p => { out += '@prefix ' + p + ': <' + prefixes[p] + '> .\n'; });
-  out += '\n';
-  const order = [];
-  const bySubj = new Map();
-  model.triples.forEach(t => {
-    const skey = t.s.type + ':' + t.s.value;
-    if(!bySubj.has(skey)){ bySubj.set(skey, { term:t.s, preds: new Map() }); order.push(skey); }
-    const entry = bySubj.get(skey);
-    if(!entry.preds.has(t.p.value)) entry.preds.set(t.p.value, []);
-    entry.preds.get(t.p.value).push(t.o);
-  });
-  order.forEach(skey => {
-    const entry = bySubj.get(skey);
-    const subjStr = termToTurtle(entry.term, false);
-    const lines = [...entry.preds.keys()].map(pUri => {
-      const predStr = termToTurtle({ type:'uri', value:pUri }, true);
-      const objStr = entry.preds.get(pUri).map(o => termToTurtle(o, false)).join(', ');
-      return '    ' + predStr + ' ' + objStr;
-    });
-    out += subjStr + '\n' + lines.join(' ;\n') + ' .\n\n';
-  });
-  return out;
-}
+function uriToTurtle(uri){ return window.LDEdit.serialize.uriToTurtle(model, uri); }
+function serializeTurtle(){ return window.LDEdit.serialize.serialize(model); }
 
 function downloadTurtle(){ saveTurtle(false); }
 

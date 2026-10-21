@@ -8,6 +8,7 @@ const path = require('path');
 const T = require('../js/turtle.js');
 const M = require('../js/model.js');
 const S = require('../js/shacl.js');
+const SER = require('../js/serialize.js');
 
 const ROOT = path.join(__dirname, '..');
 const SHAPES_DIR = path.join(ROOT, 'shapes');
@@ -72,6 +73,69 @@ function componentsFor(report, nodeValue) {
 
   const noPrefixes = M.buildModel(T.parse('<http://ex/a> <http://ex/b> <http://ex/c> .\n'), { useFilePrefixes: true });
   check('prefixen: bestand zonder prefixes krijgt standaardprefixen', noPrefixes.prefixes['rdf'] !== undefined);
+})();
+
+/* ---------------- 1c. Serialisatie: blanco nodes inline ---------------- */
+
+(function testSerialize(){
+  const roundTrip = text => {
+    const m = M.buildModel(T.parse(text));
+    const s = SER.serialize(m);
+    return { s, count: T.parse(s).triples.length, orig: m.triples.length };
+  };
+
+  // Een blanco node die maar één keer gebruikt wordt, komt inline in de parent.
+  let r = roundTrip('@prefix ex: <http://ex/> .\nex:a ex:b [ ex:c "x" ; ex:d "y" ] .\n');
+  check('serialize: geneste bnode inline als [ … ]', r.s.includes('ex:b [ ex:c "x" ; ex:d "y" ]'), r.s);
+  check('serialize: geen los bnode-blok voor geneste bnode', r.s.indexOf('_:anon') === -1, r.s);
+  eq('serialize: round-trip triple-aantal (genest)', r.count, r.orig);
+
+  // Een gedeelde blanco node kan niet inline (zou dupliceren) en blijft een blok.
+  r = roundTrip('@prefix ex: <http://ex/> .\nex:a ex:b _:n .\nex:c ex:b _:n .\n_:n ex:d "x" .\n');
+  check('serialize: gedeelde bnode blijft blok', r.s.includes('_:n\n    ex:d "x" .'), r.s);
+  eq('serialize: gedeelde bnode twee verwijzingen', (r.s.match(/ex:b _:n/g) || []).length, 2);
+
+  // Een losse cyclus mag niet oneindig worden en moet als blokken eindigen.
+  r = roundTrip('@prefix ex: <http://ex/> .\n_:x ex:y _:y .\n_:y ex:y _:x .\n');
+  eq('serialize: cyclus round-trip triple-aantal', r.count, 2);
+
+  // Een goed gevormde lijst wordt weer ( … ).
+  r = roundTrip('@prefix ex: <http://ex/> .\nex:a ex:b ( "p" "q" ) .\n');
+  check('serialize: lijst als ( … )', r.s.includes('ex:b ( "p" "q" )'), r.s);
+  check('serialize: geen losse lijstblokken', r.s.indexOf('_:coll') === -1, r.s);
+  eq('serialize: round-trip triple-aantal (lijst)', r.count, r.orig);
+
+  // Lijst met blanco-node-items, zoals sh:or.
+  r = roundTrip('@prefix ex: <http://ex/> .\nex:s ex:or ( [ ex:d ex:a ] [ ex:d ex:b ] ) .\n');
+  check('serialize: lijst van bnodes als ( [ … ] [ … ] )', r.s.includes('( [ ex:d ex:a ] [ ex:d ex:b ] )'), r.s);
+  eq('serialize: round-trip triple-aantal (lijst van bnodes)', r.count, r.orig);
+
+  // Getallen/booleans zonder overbodig datatype.
+  r = roundTrip('@prefix ex: <http://ex/> .\nex:a ex:n 1 ; ex:d 2.5 ; ex:b true .\n');
+  check('serialize: integer bare', r.s.includes('ex:n 1'), r.s);
+  check('serialize: decimal bare', r.s.includes('ex:d 2.5'), r.s);
+  check('serialize: boolean bare', r.s.includes('ex:b true'), r.s);
+  check('serialize: geen ^^xsd:integer', r.s.indexOf('xsd:integer') === -1, r.s);
+  eq('serialize: round-trip triple-aantal (getallen)', r.count, r.orig);
+
+  // xsd:double zonder exponent moet gequoteerd blijven (bare zou xsd:decimal zijn).
+  r = roundTrip('@prefix ex: <http://ex/> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:a ex:v "1.0"^^xsd:double .\n');
+  check('serialize: xsd:double zonder exponent blijft gequoteerd', r.s.includes('"1.0"^^xsd:double'), r.s);
+})();
+
+/* ---------------- 1d. Ronde-trip van de meegeleverde shape-bestanden ---------------- */
+
+(function testShapeRoundTrip(){
+  const files = fs.readdirSync(SHAPES_DIR).filter(f => f.endsWith('.ttl'));
+  const orig = files.map(f => ({ name: f, text: fs.readFileSync(path.join(SHAPES_DIR, f), 'utf8') }));
+  const a = S.buildShapes(S.parseShapeFiles(orig));
+  const rt = orig.map(f => ({ name: f.name, text: SER.serialize(M.buildModel(T.parse(f.text), { useFilePrefixes: true })) }));
+  const b = S.buildShapes(S.parseShapeFiles(rt));
+  eq('shapes-round-trip: node shapes gelijk', b.nodeShapeCount, a.nodeShapeCount);
+  eq('shapes-round-trip: property shapes gelijk', b.propertyShapeCount, a.propertyShapeCount);
+  const triA = orig.reduce((n, f) => n + T.parse(f.text).triples.length, 0);
+  const triB = rt.reduce((n, f) => n + T.parse(f.text).triples.length, 0);
+  eq('shapes-round-trip: aantal triples gelijk', triB, triA);
 })();
 
 /* ---------------- 2. Shapes bouwen uit de meegeleverde bestanden ---------------- */

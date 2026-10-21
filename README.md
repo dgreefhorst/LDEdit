@@ -120,6 +120,47 @@ Een blanco node die in het bestand alleen genoemd wordt (`ex:Ding ex:adres _:x1`
 de lijst zodra je er zelf iets over zegt; vanaf dat moment is het een instantie, net als bij
 het laden.
 
+### Blanco nodes inline
+
+Een blanco node die als waarde voorkomt (bijvoorbeeld `ex:adres [ … ]`) wordt **direct in de
+resource zelf uitgeklapt**, zodat je de eigenschappen ervan ziet en meteen kunt bewerken —
+zonder eerst naar die node te navigeren. Standaard staat het eerste niveau open; met het
+**▾/▸**-knopje klap je een niveau open of dicht. Dieper gelegen blanco nodes blijven dicht tot
+je ze zelf openklapt.
+
+In een uitgeklapt blok werkt alles hetzelfde als in een gewone resource: waarden aanpassen,
+de taal wijzigen, een verwijzing wijzigen met **✎**, een waarde verwijderen met **×**, en met
+**+ Eigenschap of relatie toevoegen** een eigenschap aan de blanco node toevoegen. De **×**
+naast de blanco node zelf verwijdert de **hele** node met al zijn eigenschappen.
+
+Een RDF-collectie `( … )` verschijnt als de **items** tussen haakjes, bijvoorbeeld
+`( "lezen" , "fietsen" )` of een lijst van blanco nodes (zoals `dcat:distribution ( [ … ] [ … ] )`).
+De onderliggende `rdf:first`/`rdf:rest`-structuur wordt niet getoond; de items zelf zijn wel
+bewerkbaar. Met **+** naast de lijst voeg je een item toe — een **nieuwe blanco node**, een
+**vaste waarde** of een **verwijzing** naar een bestaande resource — en met de **×** bij een
+item haal je het uit de lijst (de keten wordt netjes herschakeld). De **×** bij de lijst zelf
+verwijdert de hele collectie. Herordenen en het bewerken van de lijststructuur zelf vallen
+buiten de app.
+
+Verwijst een blanco node terug naar een bovenliggende node, dan stopt het uitklappen daar met
+een **↩**-marker (geen oneindige herhaling).
+
+### Bij het opslaan
+
+De uitvoer houdt de structuur van het bestand zoveel mogelijk intact:
+
+- Een blanco node die maar **één keer** als waarde gebruikt wordt, wordt **inline** geschreven
+  (`sh:property [ sh:path … ; sh:minCount 1 ]`) in plaats van als los `_:anonN`-blok.
+- Een blanco node die **vaker** gebruikt wordt, in een **cyclus** zit of een afwijkende lijst
+  vormt, krijgt wél een eigen `_:id`-blok (inline zou de node dupliceren of oneindig worden).
+- Een goed gevormde RDF-collectie wordt weer **`( … )`** (`sh:or ( [ sh:datatype xsd:double ] [ sh:datatype xsd:string ] )`).
+- Getallen en booleans met de standaard xsd-vorm worden zonder datatype geschreven (`1`,
+  `2.5`, `true` in plaats van `"1"^^xsd:integer`).
+
+Let op: **commentaar blijft niet bewaard** en de opmaak wordt genormaliseerd (elke inline blanco
+node staat op één regel). Bewerk daarom een bestand met veel toelichtende comments liever niet
+via de app, of gebruik **Opslaan als…** naar een kopie.
+
 Welke eigenschappen de shapes bij een klasse voorschrijven bepaalt ook het **datatype** in het
 formulier: zodra je een eigenschap kiest, wordt het datatype uit de shape voorgeselecteerd
 (bijvoorbeeld `sh:datatype xsd:date` → "Datum (xsd:date)"). Staat het datatype als alternatief
