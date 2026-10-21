@@ -156,10 +156,14 @@ De uitvoer houdt de structuur van het bestand zoveel mogelijk intact:
 - Een goed gevormde RDF-collectie wordt weer **`( … )`** (`sh:or ( [ sh:datatype xsd:double ] [ sh:datatype xsd:string ] )`).
 - Getallen en booleans met de standaard xsd-vorm worden zonder datatype geschreven (`1`,
   `2.5`, `true` in plaats van `"1"^^xsd:integer`).
+- Lange waarden worden over meerdere regels verdeeld (inspringing, en lange kommaliisten
+  wikkelen mee), zodat er geen extreem lange regels ontstaan. Eén lange literal-tekst
+  (`rdfs:comment`, `skos:scopeNote`, …) blijft wel op één regel — die kun je in Turtle niet
+  splitsen zonder de tekst te wijzigen.
 
-Let op: **commentaar blijft niet bewaard** en de opmaak wordt genormaliseerd (elke inline blanco
-node staat op één regel). Bewerk daarom een bestand met veel toelichtende comments liever niet
-via de app, of gebruik **Opslaan als…** naar een kopie.
+Let op: **commentaar blijft niet bewaard** en de opmaak wordt genormaliseerd. Bewerk daarom een
+bestand met veel toelichtende comments liever niet via de app, of gebruik **Opslaan als…** naar
+een kopie.
 
 ## TTL bekijken en bewerken
 

@@ -237,6 +237,25 @@
       return '(\n' + body.join('\n') + '\n' + indent(level) + ')';
     }
 
+    // Wikkelt een kommaliist van korte (éénregelige) waarden over meerdere
+    // regels, tot maximaal MAX_LINE per regel.
+    function wrapObjects(head, singles, level){
+      const cont = indent(level + 1);
+      const lines = [];
+      let line = head + singles[0];
+      for(let i = 1; i < singles.length; i++){
+        const s = singles[i];
+        if(line.length + ' , '.length + s.length > MAX_LINE){
+          lines.push(line + ' ,');
+          line = cont + s;
+        } else {
+          line += ' , ' + s;
+        }
+      }
+      lines.push(line);
+      return lines.join('\n');
+    }
+
     // De predicaat-regels van één subject. Past een object niet op de regel
     // (of is het zelf meerregelig), dan komt het meerregelig; bij meerdere zulke
     // objecten wordt het predicaat per object herhaald (zoals in het origineel).
@@ -252,9 +271,14 @@
             ? singles[i]
             : objectMulti(o, level)
         );
-        if(rendered.length === 1) stmts.push(head + rendered[0]);
-        else if(rendered.every(r => r.indexOf('\n') === -1)) stmts.push(head + rendered.join(', '));
-        else rendered.forEach(r => stmts.push(head + r));
+        if(rendered.length === 1){
+          stmts.push(head + rendered[0]);
+        } else if(rendered.every(r => r.indexOf('\n') === -1)){
+          const joined = head + rendered.join(', ');
+          stmts.push(joined.length <= MAX_LINE ? joined : wrapObjects(head, rendered, level));
+        } else {
+          rendered.forEach(r => stmts.push(head + r));
+        }
       });
       return stmts;
     }

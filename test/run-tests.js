@@ -131,6 +131,15 @@ function componentsFor(report, nodeValue) {
   r = roundTrip('@prefix ex: <http://ex/> .\nex:a ex:b ( "aaaaaaaaaaaaaaaaaaaa" "bbbbbbbbbbbbbbbbbbbb" "cccccccccccccccccccc" "dddddddddddddddddddd" ) .\n');
   check('serialize: lange lijst meerregelig', r.s.includes('(\n        "aaaaaaaaaaaaaaaaaaaa"'), r.s);
   eq('serialize: round-trip (meerregelige lijst)', r.count, r.orig);
+
+  // Een lange kommaliist van korte waarden wordt gewikkeld.
+  const many = [];
+  for(let i = 1; i <= 40; i++) many.push('ex:m' + i);
+  r = roundTrip('@prefix ex: <http://ex/> .\nex:a ex:member ' + many.join(', ') + ' .\n');
+  const maxLen = Math.max.apply(null, r.s.split('\n').map(l => l.length));
+  check('serialize: lange objectlijst wordt gewikkeld', maxLen <= 100, 'langste regel: ' + maxLen);
+  check('serialize: wikkeling houdt de kommaliist', r.s.includes('ex:member ex:m1 ,'), r.s);
+  eq('serialize: round-trip (gewikkelde lijst)', r.count, r.orig);
 })();
 
 /* ---------------- 1d. Serialisatie van één subject ---------------- */
