@@ -249,15 +249,17 @@ Wat het diagram bevat hangt af van het gekozen **modeltype**:
   attributen (met `mim:type` en `mim:kardinaliteit`), relatiesoorten worden associaties
   (`mim:bron` → `mim:doel`, label `mim:naam`), en generalisaties worden overerving. Enumeraties,
   gestructureerde datatypen en referentielijsten krijgen hun waarden/elementen als attributen.
-  Opties: **MIM-stereotypen tonen** en **datatypes tonen**.
+  Opties: **MIM-stereotypen tonen**, **datatypes tonen** en **alleen kern** (alleen objecttypen,
+  gegevensgroeptypen en hun relaties; datatypen, enumeraties en referentielijsten vallen dan weg).
 - **OWL/RDFS** — een gewoon UML-klassediagram zonder stereotypen: klassen uit het model,
   datatype-eigenschappen als attributen (via `rdfs:domain`/`rdfs:range`), objecteigenschappen als
   associaties en `rdfs:subClassOf` als overerving. Opties: **datatypes tonen** en
   **rdfs:labels i.p.v. CURIEs**.
-- **Overige modeltypes** (en "geen") — hetzelfde generieke klassediagram, met daarbij de
-  **soort-** en **klassefilter** uit de zijbalk/rapportage: `klassen` → die klassen, `instanties` →
-  de klassen waarvan ze instantie zijn, `eigenschappen`/`relaties` → de klassen die als
-  domein/bereik dienen. Plus dezelfde twee opties.
+- **Overige modeltypes** (en "geen") — hetzelfde generieke klassediagram, met daarbij de keuze
+  **instanties** of **klassen** en een **klassefilter**: `klassen` → die klassen (met hun
+  attributen en relaties), `instanties` → de klassen waarvan ze instantie zijn. Eigenschappen en
+  relaties als filter zijn weggelaten: die leveren geen zinvol klassediagram op. Plus dezelfde twee
+  opties.
 
 De knopen worden in een eenvoudig raster geplaatst; yEd en Draw.IO kunnen daarna zelf opnieuw
 indelen. Associaties en generalisaties worden alleen getekend als beide uiteinden in het diagram

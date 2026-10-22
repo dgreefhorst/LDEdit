@@ -85,6 +85,9 @@
       const types = typesOf(model, uri);
       const kind = MIM_CLASS_KINDS.find(k => types.indexOf(MIM + k) !== -1);
       if(!kind) return;
+      // "Alleen kern": alleen objecttypen en gegevensgroeptypen (plus hun
+      // relaties); datatypen, enumeraties en referentielijsten vallen weg.
+      if(options.coreOnly && kind !== 'Objecttype' && kind !== 'Gegevensgroeptype') return;
       classUris.add(uri);
       classes.push(buildMimClass(model, uri, kind, options));
     });

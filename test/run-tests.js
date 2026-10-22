@@ -329,6 +329,23 @@ ex:baas a owl:ObjectProperty ; rdfs:label "baas" ; rdfs:domain ex:Hond ; rdfs:ra
   const empty = DG.build(owlModel, { flavor: 'generic', items: [] });
   eq('diagram: leeg filter geeft geen klassen', empty.classes.length, 0);
 
+  // MIM "alleen kern": objecttypen + gegevensgroeptypen, relaties behouden.
+  const coreSrc = `@prefix ex: <http://ex/> .
+@prefix mim: <http://modellen.mim-standaard.nl/def/mim#> .
+ex:OT a mim:Objecttype ; mim:naam "OT" .
+ex:GGT a mim:Gegevensgroeptype ; mim:naam "GGT" .
+ex:Enum a mim:Enumeratie ; mim:naam "Enum" .
+ex:R a mim:Relatiesoort ; mim:naam "r" ; mim:bron ex:OT ; mim:doel ex:GGT .
+`;
+  const coreModel = M.buildModel(T.parse(coreSrc), { useFilePrefixes: true });
+  const fullMim = DG.build(coreModel, { flavor: 'mim', stereotypes: true });
+  eq('diagram: MIM volledig aantal klassen', fullMim.classes.length, 3);
+  const coreMim = DG.build(coreModel, { flavor: 'mim', stereotypes: true, coreOnly: true });
+  eq('diagram: MIM alleen kern — aantal klassen', coreMim.classes.length, 2);
+  check('diagram: MIM alleen kern — alleen object-/gegevensgroeptypen',
+    coreMim.classes.every(c => c.stereotype === 'Objecttype' || c.stereotype === 'Gegevensgroeptype'));
+  eq('diagram: MIM alleen kern — relatie behouden', coreMim.associations.length, 1);
+
   // Serializers.
   check('diagram: PlantUML', DG.toPlantUml(gen).indexOf('@startuml') === 0 && DG.toPlantUml(gen).includes('<|--'), DG.toPlantUml(gen));
   check('diagram: Mermaid', DG.toMermaid(gen).includes('classDiagram') && DG.toMermaid(gen).includes('class ex_Dier["Dier"]'), DG.toMermaid(gen));

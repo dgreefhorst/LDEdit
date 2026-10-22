@@ -3687,7 +3687,10 @@ function renderDiagramBody(){
   if(!mim && !owl){
     html += `<div class="report-field">
         <label for="diagramKind">Soort</label>
-        <select id="diagramKind">${reportKindOptions(kindFilter)}</select>
+        <select id="diagramKind">
+          <option value="individuals">Instanties</option>
+          <option value="classes">Klassen</option>
+        </select>
       </div>
       <div class="report-field">
         <label for="diagramKlasse">Klasse</label>
@@ -3696,38 +3699,34 @@ function renderDiagramBody(){
   }
   html += `</div>
     <div class="diagram-options">
-      ${mim ? '<label><input type="checkbox" id="diagramStereotypes" checked> MIM-stereotypen tonen</label>' : ''}
+      ${mim ? `<label><input type="checkbox" id="diagramStereotypes" checked> MIM-stereotypen tonen</label>
+        <label><input type="checkbox" id="diagramMimCore"> Alleen kern (objecttypen, gegevensgroeptypen, relaties)</label>` : ''}
       <label><input type="checkbox" id="diagramDatatypes" checked> Datatypes tonen</label>
       ${mim ? '' : '<label><input type="checkbox" id="diagramLabels" checked> rdfs:labels i.p.v. CURIEs</label>'}
     </div>`;
   document.getElementById('diagramBody').innerHTML = html;
-  if(!mim && !owl) document.getElementById('diagramKlasse').value = classFilter || '';
+  if(!mim && !owl){
+    // Alleen klassen en instanties zijn zinvol in een klassediagram; een
+    // eigenschappen-/relatiefilter uit de zijbalk valt terug op instanties.
+    document.getElementById('diagramKind').value = kindFilter === 'classes' ? 'classes' : 'individuals';
+    document.getElementById('diagramKlasse').value = classFilter || '';
+  }
   document.querySelectorAll('#diagramBody select, #diagramBody input[type="checkbox"]')
     .forEach(el => el.addEventListener('change', updateDiagramPreview));
 }
 
 // Voor "overige" modeltypes: welke klassen horen bij de gekozen soort/klasse.
+// Alleen klassen en instanties; eigenschappen/relaties leveren geen zinvol
+// klassediagram op.
 function diagramClassSet(kind, klass){
   const items = itemsFor(kind, klass);
   if(kind === 'classes') return items.filter(u => model.classes.includes(u));
   const set = new Set();
-  if(kind === 'individuals'){
-    items.forEach(uri => {
-      const node = model.nodes[uri];
-      if(!node) return;
-      [...node.types].forEach(t => { if(!isExcludedCore(t) && model.classes.includes(t)) set.add(t); });
-    });
-  } else {
-    items.forEach(prop => {
-      const node = model.nodes[prop];
-      if(!node) return;
-      node.out.forEach(e => {
-        if((e.p === RDFS + 'domain' || e.p === RDFS + 'range') && e.o.type === 'uri' && model.classes.includes(e.o.value)){
-          set.add(e.o.value);
-        }
-      });
-    });
-  }
+  items.forEach(uri => {
+    const node = model.nodes[uri];
+    if(!node) return;
+    [...node.types].forEach(t => { if(!isExcludedCore(t) && model.classes.includes(t)) set.add(t); });
+  });
   return [...set];
 }
 
@@ -3736,9 +3735,11 @@ function diagramOptions(){
   const stereotypes = document.getElementById('diagramStereotypes');
   const datatypes = document.getElementById('diagramDatatypes');
   const labels = document.getElementById('diagramLabels');
+  const mimCore = document.getElementById('diagramMimCore');
   opts.stereotypes = stereotypes ? stereotypes.checked : false;
   opts.showDatatypes = datatypes ? datatypes.checked : true;
   opts.useLabels = labels ? labels.checked : false;
+  opts.coreOnly = mimCore ? mimCore.checked : false;
   if(opts.flavor !== 'mim' && !diagramIsOwl()){
     const kind = document.getElementById('diagramKind').value;
     const klass = document.getElementById('diagramKlasse').value;
