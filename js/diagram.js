@@ -303,15 +303,25 @@
   function toMermaid(diagram){
     const lines = ['classDiagram'];
     diagram.classes.forEach(c => {
-      const label = String(c.name).replace(/"/g, "'");
-      lines.push('class ' + c.id + '["' + label + '"] {');
-      if(c.abstract) lines.push('  <<abstract>>');
-      if(c.stereotype) lines.push('  <<' + c.stereotype + '>>');
-      c.attributes.forEach(a => {
-        const member = (a.type ? a.type + ' ' : '') + a.name;
-        lines.push('  +' + member);
-      });
-      lines.push('}');
+      // Mermaid accepteert geen <<stereotype>>-annotatie in de klassestructuur;
+      // zet het stereotype daarom in de label en laat de accolades weg als er
+      // geen attributen zijn.
+      const extras = [];
+      if(c.abstract) extras.push('(abstract)');
+      if(c.stereotype) extras.push('«' + c.stereotype + '»');
+      let label = c.name + (extras.length ? ' ' + extras.join(' ') : '');
+      label = String(label).replace(/"/g, "'");
+      if(c.attributes.length){
+        lines.push('class ' + c.id + '["' + label + '"] {');
+        c.attributes.forEach(a => {
+          // Accolades in namen ({id}) worden anders als structuur geparsed.
+          const name = a.name.replace(/[{}]/g, ch => (ch === '{' ? '(' : ')'));
+          lines.push('  +' + ((a.type ? a.type + ' ' : '') + name));
+        });
+        lines.push('}');
+      } else {
+        lines.push('class ' + c.id + '["' + label + '"]');
+      }
     });
     diagram.generalizations.forEach(g => lines.push(g.sup + ' <|-- ' + g.sub));
     diagram.associations.forEach(a => {
