@@ -10,6 +10,7 @@ const M = require('../js/model.js');
 const S = require('../js/shacl.js');
 const SER = require('../js/serialize.js');
 const REP = require('../js/report.js');
+const DG = require('../js/diagram.js');
 
 const ROOT = path.join(__dirname, '..');
 const SHAPES_DIR = path.join(ROOT, 'shapes');
@@ -213,8 +214,19 @@ function componentsFor(report, nodeValue) {
 
   const m = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:a ex:p "een" ; ex:p "twee" ; ex:q ex:other .\n'), { useFilePrefixes: true });
   const table = REP.buildTable(m, ['http://ex/a'], ['http://ex/p', 'http://ex/q']);
-  eq('rapportage: kolomkoppen', table.header.join('|'), 'resource|ex:p|ex:q');
+  eq('rapportage: kolomkoppen', table.header.join('|'), 'URI|ex:p|ex:q');
   eq('rapportage: rij met waarden', table.rows[0].join('|'), 'http://ex/a|een; twee|ex:other');
+
+  // Alleen standaardkolommen die echt voorkomen.
+  const onlyPref = M.buildModel(T.parse('@prefix ex: <http://ex/> . @prefix skos: <http://www.w3.org/2004/02/skos/core#> .\nex:a skos:prefLabel "A" .\n'), { useFilePrefixes: true });
+  eq('rapportage: alleen aanwezige standaardkolom', REP.defaultColumns(onlyPref).join(','), SKOS + 'prefLabel');
+  const noDefaults = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:a ex:p "x" .\n'), { useFilePrefixes: true });
+  eq('rapportage: geen standaardkolommen als ze ontbreken', REP.defaultColumns(noDefaults).length, 0);
+
+  // URI-kolom uitzetten.
+  const noUri = REP.buildTable(m, ['http://ex/a'], ['http://ex/p'], { includeResource: false });
+  eq('rapportage: URI-kolom uit (kop)', noUri.header.join('|'), 'ex:p');
+  eq('rapportage: URI-kolom uit (rij)', noUri.rows[0].join('|'), 'een; twee');
 
   const csv = REP.toCsv({ header: ['a', 'b'], rows: [['x,y', 'zeg "hallo"'], ['n', 'regel\nnieuw']] });
   check('rapportage: UTF-8 BOM', csv.charCodeAt(0) === 0xFEFF, 'geen BOM');
@@ -222,8 +234,106 @@ function componentsFor(report, nodeValue) {
   check('rapportage: quotes verdubbeld', csv.includes('"zeg ""hallo"""'), csv);
   check('rapportage: regeleinde in cel', csv.includes('"regel\nnieuw"'), csv);
 
+  const wiki = REP.toMediaWiki({ header: ['URI', 'ex:p'], rows: [['http://ex/a', 'een|twee']] });
+  check('rapportage: mediawiki-tabel', wiki.includes('{| class="wikitable"') && wiki.includes('! URI !! ex:p') && wiki.includes('| http://ex/a || een&#124;twee'), wiki);
+
+  const html = REP.toHtml({ header: ['URI', 'ex:p'], rows: [['http://ex/a', '<x> & "y"']] });
+  check('rapportage: html-document', html.includes('<!DOCTYPE html>') && html.includes('<table>'), html);
+  check('rapportage: html escaping', html.includes('&lt;x&gt; &amp; &quot;y&quot;'), html);
+
+  const md = REP.toMarkdown({ header: ['URI', 'ex:p'], rows: [['http://ex/a', 'een|twee']] });
+  check('rapportage: markdown-tabel', md.includes('| URI | ex:p |') && md.includes('| --- | --- |'), md);
+  check('rapportage: markdown pipe escaping', md.includes('een\\|twee'), md);
+
   const withType = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:a a ex:C .\n'), { useFilePrefixes: true });
   check('rapportage: rdf:type niet in de kolomkeuzes', REP.predicatesInModel(withType).indexOf(RDF + 'type') === -1);
+})();
+
+/* ---------------- 1g. Diagrammen ---------------- */
+
+(function testDiagram(){
+  const MIM = 'http://modellen.mim-standaard.nl/def/mim#';
+  const mimSrc = `@prefix ex: <http://ex/> .
+@prefix mim: <http://modellen.mim-standaard.nl/def/mim#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:Objecttype_Persoon a mim:Objecttype ;
+  mim:naam "Persoon" ;
+  mim:attribuut ex:Attr_naam .
+ex:Objecttype_Hond a mim:Objecttype ;
+  mim:naam "Hond" ;
+  mim:supertype ex:Objecttype_Persoon .
+ex:Attr_naam a mim:Attribuutsoort ;
+  mim:naam "naam" ;
+  mim:type mim:CharacterString ;
+  mim:kardinaliteit "1" ;
+  mim:identificerend true .
+ex:Rel_baas a mim:Relatiesoort ;
+  mim:naam "baas" ;
+  mim:bron ex:Objecttype_Hond ;
+  mim:doel ex:Objecttype_Persoon ;
+  mim:kardinaliteit "0..1" .
+`;
+  const mimModel = M.buildModel(T.parse(mimSrc), { useFilePrefixes: true });
+  const mim = DG.build(mimModel, { flavor: 'mim', stereotypes: true, showDatatypes: true });
+
+  eq('diagram: MIM aantal klassen', mim.classes.length, 2);
+  const persoon = mim.classes.find(c => c.name === 'Persoon');
+  const hond = mim.classes.find(c => c.name === 'Hond');
+  check('diagram: MIM klasse gevonden', Boolean(persoon && hond));
+  eq('diagram: MIM stereotype', persoon.stereotype, 'Objecttype');
+  eq('diagram: MIM identificerend attribuut', persoon.attributes[0].name, 'naam {id}');
+  eq('diagram: MIM datatype', persoon.attributes[0].type, 'CharacterString');
+  eq('diagram: MIM kardinaliteit', persoon.attributes[0].multiplicity, '1');
+  eq('diagram: MIM associatie', mim.associations.length, 1);
+  eq('diagram: MIM associatie label', mim.associations[0].label, 'baas');
+  eq('diagram: MIM associatie multipliciteit', mim.associations[0].multiplicity, '0..1');
+  eq('diagram: MIM generalisatie', mim.generalizations.length, 1);
+  eq('diagram: MIM generalisatie sub', mim.generalizations[0].sub, hond.id);
+  eq('diagram: MIM generalisatie sup', mim.generalizations[0].sup, persoon.id);
+
+  const noStereo = DG.build(mimModel, { flavor: 'mim', stereotypes: false, showDatatypes: false });
+  eq('diagram: MIM zonder stereotype', noStereo.classes.find(c => c.name === 'Persoon').stereotype, '');
+  eq('diagram: MIM zonder datatype', noStereo.classes.find(c => c.name === 'Persoon').attributes[0].type, '');
+
+  // Generiek (OWL/RDFS).
+  const owlSrc = `@prefix ex: <http://ex/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ex:Dier a owl:Class ; rdfs:label "Dier" .
+ex:Hond a owl:Class ; rdfs:label "Hond" ; rdfs:subClassOf ex:Dier .
+ex:Persoon a owl:Class ; rdfs:label "Persoon" .
+ex:naam a owl:DatatypeProperty ; rdfs:label "naam" ; rdfs:domain ex:Dier ; rdfs:range xsd:string .
+ex:leeftijd a owl:DatatypeProperty ; rdfs:label "leeftijd" ; rdfs:domain ex:Hond ; rdfs:range xsd:integer .
+ex:baas a owl:ObjectProperty ; rdfs:label "baas" ; rdfs:domain ex:Hond ; rdfs:range ex:Persoon .
+`;
+  const owlModel = M.buildModel(T.parse(owlSrc), { useFilePrefixes: true });
+  const gen = DG.build(owlModel, { flavor: 'generic', useLabels: true, showDatatypes: true });
+  eq('diagram: generiek aantal klassen', gen.classes.length, 3);
+  eq('diagram: generiek label als naam', gen.classes.find(c => c.id === 'ex_Dier').name, 'Dier');
+  eq('diagram: generiek attribuut', gen.classes.find(c => c.id === 'ex_Dier').attributes[0].name, 'naam');
+  eq('diagram: generiek attribuuttype', gen.classes.find(c => c.id === 'ex_Dier').attributes[0].type, 'string');
+  eq('diagram: generiek associatie', gen.associations.length, 1);
+  eq('diagram: generiek generalisatie', gen.generalizations.length, 1);
+
+  const curies = DG.build(owlModel, { flavor: 'generic', useLabels: false, showDatatypes: false });
+  eq('diagram: curie als naam', curies.classes.find(c => c.id === 'ex_Dier').name, 'ex:Dier');
+  eq('diagram: generiek zonder datatype', curies.classes.find(c => c.id === 'ex_Dier').attributes[0].type, '');
+
+  const subset = DG.build(owlModel, { flavor: 'generic', useLabels: true, showDatatypes: true, items: ['http://ex/Hond', 'http://ex/Dier'] });
+  eq('diagram: filter beperkt aantal klassen', subset.classes.length, 2);
+  eq('diagram: filter laat associatie naar buiten weg', subset.associations.length, 0);
+  eq('diagram: filter behoudt generalisatie', subset.generalizations.length, 1);
+
+  const empty = DG.build(owlModel, { flavor: 'generic', items: [] });
+  eq('diagram: leeg filter geeft geen klassen', empty.classes.length, 0);
+
+  // Serializers.
+  check('diagram: PlantUML', DG.toPlantUml(gen).indexOf('@startuml') === 0 && DG.toPlantUml(gen).includes('<|--'), DG.toPlantUml(gen));
+  check('diagram: Mermaid', DG.toMermaid(gen).includes('classDiagram') && DG.toMermaid(gen).includes('class ex_Dier["Dier"]'), DG.toMermaid(gen));
+  check('diagram: Draw.IO', DG.toDrawio(gen).includes('<mxfile') && DG.toDrawio(gen).includes('&lt;b&gt;Dier&lt;/b&gt;'), DG.toDrawio(gen).slice(0, 800));
+  check('diagram: GraphML', DG.toGraphml(gen).includes('<graphml') && DG.toGraphml(gen).includes('<y:ShapeNode>'), DG.toGraphml(gen).slice(0, 600));
 })();
 
 /* ---------------- 2. Shapes bouwen uit de meegeleverde bestanden ---------------- */

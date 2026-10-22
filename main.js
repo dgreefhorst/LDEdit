@@ -243,15 +243,17 @@ async function writeDocument({ text, suggestedName, forceDialog }) {
 }
 
 ipcMain.handle('ttl:save', (_event, payload) => writeDocument(payload));
-// CSV-rapportage opslaan. Staat los van het document: het wijzigt het huidige
-// bestand en de titel niet.
+// Rapportage of diagram opslaan (CSV, MediaWiki, HTML, Markdown, PlantUML,
+// Mermaid, GraphML of Draw.IO). Staat los van het document: het wijzigt het
+// huidige bestand en de titel niet.
 ipcMain.handle('report:save', async (_event, payload) => {
-  const { text, suggestedName } = payload || {};
+  const { text, suggestedName, filterName, extensions, title } = payload || {};
+  const exts = Array.isArray(extensions) && extensions.length ? extensions : ['csv'];
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-    title: 'Rapportage opslaan',
+    title: typeof title === 'string' && title ? title : 'Rapportage opslaan',
     defaultPath: path.join(app.getPath('documents'), suggestedName || 'rapportage.csv'),
     filters: [
-      { name: 'CSV', extensions: ['csv'] },
+      { name: filterName || 'Rapportage', extensions: exts },
       { name: 'Alle bestanden', extensions: ['*'] }
     ]
   });
@@ -450,6 +452,7 @@ async function buildMenu() {
         { type: 'separator' },
         { label: 'TTL-preview…', accelerator: 'Shift+CmdOrCtrl+P', click: () => send('app:ttl-preview') },
         { label: 'Rapportage…', accelerator: 'CmdOrCtrl+E', click: () => send('app:report') },
+        { label: 'Diagram…', accelerator: 'Shift+CmdOrCtrl+D', click: () => send('app:diagram') },
         { type: 'separator' },
         { label: 'Prefixen…', accelerator: 'CmdOrCtrl+,', click: () => send('app:prefixes') }
       ]

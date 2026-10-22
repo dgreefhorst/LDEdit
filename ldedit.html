@@ -577,6 +577,8 @@
   .report-col{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:13px;cursor:pointer;word-break:break-all;}
   .report-col .rc-uri{font-family:var(--mono);font-size:11px;color:var(--ink-soft);}
   .report-count{font-size:12px;color:var(--ink-soft);margin-top:10px;min-height:16px;}
+  .diagram-options{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 2px;}
+  .diagram-options label{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink);cursor:pointer;}
   .prefix-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
   .prefix-row input{padding:6px 8px;border:1px solid var(--line);border-radius:3px;font-size:13px;font-family:var(--mono);background:var(--bg);}
   .prefix-row input:focus{outline:none;border-color:var(--accent);}
@@ -747,10 +749,26 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="diagramOverlay" style="display:none;">
+  <div class="modal ttl-modal">
+    <h3 class="modal-title">Diagram</h3>
+    <p class="edit-hint" style="margin:0 0 12px;">Kies een formaat en de opties; de preview ververst direct.</p>
+    <div id="diagramBody"></div>
+    <div class="report-cols-title" style="margin-top:12px;">Preview</div>
+    <textarea class="ttl-text" id="diagramPreview" readonly spellcheck="false" style="min-height:260px;"></textarea>
+    <div class="report-count" id="diagramCount"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn primary" id="diagramSaveBtn">Opslaan…</button>
+      <button type="button" class="rel-picker-cancel" id="diagramCloseBtn">Sluiten</button>
+    </div>
+  </div>
+</div>
+
 <script src="js/turtle.js"></script>
 <script src="js/model.js"></script>
 <script src="js/serialize.js"></script>
 <script src="js/report.js"></script>
+<script src="js/diagram.js"></script>
 <script src="js/shacl.js"></script>
 <script>
 (function(){
@@ -3528,7 +3546,14 @@ function reportOrderedColumns(){
 }
 
 function selectedReportColumns(){
-  return [...document.querySelectorAll('#reportCols input:checked')].map(i => i.value);
+  return [...document.querySelectorAll('#reportCols input:checked')]
+    .filter(i => i.id !== 'reportIncludeUri')
+    .map(i => i.value);
+}
+
+function reportIncludeUri(){
+  const el = document.getElementById('reportIncludeUri');
+  return el ? el.checked : true;
 }
 
 function openReportDialog(){
@@ -3553,9 +3578,19 @@ function renderReportBody(){
         <label for="reportKlasse">Klasse</label>
         <select id="reportKlasse">${classFilterOptions()}</select>
       </div>
+      <div class="report-field">
+        <label for="reportFormat">Formaat</label>
+        <select id="reportFormat">
+          <option value="csv">CSV</option>
+          <option value="mediawiki">MediaWiki-tabel</option>
+          <option value="html">HTML</option>
+          <option value="markdown">Markdown</option>
+        </select>
+      </div>
     </div>
     <div class="report-cols-title">Kolommen</div>
     <div class="report-cols" id="reportCols">
+      <label class="report-col"><input type="checkbox" id="reportIncludeUri" checked> <span>URI<span class="rc-uri"> — de resource-IRI</span></span></label>
       ${columns.map(p => `<label class="report-col"><input type="checkbox" value="${esc(p)}"${defaults.has(p) ? ' checked' : ''}> <span>${esc(model.curie(p))}<span class="rc-uri"> — ${esc(p)}</span></span></label>`).join('')}
     </div>
     <div class="report-count" id="reportCount"></div>`;
@@ -3569,29 +3604,38 @@ function updateReportCount(){
   const kind = document.getElementById('reportKind').value;
   const klass = document.getElementById('reportKlasse').value;
   const items = itemsFor(kind, klass);
-  const cols = selectedReportColumns();
+  const cols = selectedReportColumns().length + (reportIncludeUri() ? 1 : 0);
   document.getElementById('reportCount').textContent =
     items.length + ' rij' + (items.length === 1 ? '' : 'en') + ' · ' +
-    cols.length + ' kolom' + (cols.length === 1 ? '' : 'men');
+    cols + ' kolom' + (cols === 1 ? '' : 'men');
+}
+
+function reportFormat(format){
+  const r = window.LDEdit.report;
+  if(format === 'mediawiki') return { fn:r.toMediaWiki, ext:'wiki', mime:'text/plain;charset=utf-8', label:'MediaWiki-tabel', exts:['wiki','txt'] };
+  if(format === 'html') return { fn:r.toHtml, ext:'html', mime:'text/html;charset=utf-8', label:'HTML', exts:['html','htm'] };
+  if(format === 'markdown') return { fn:r.toMarkdown, ext:'md', mime:'text/markdown;charset=utf-8', label:'Markdown', exts:['md','markdown'] };
+  return { fn:r.toCsv, ext:'csv', mime:'text/csv;charset=utf-8', label:'CSV', exts:['csv'] };
 }
 
 function exportReport(){
   if(!model) return;
   const kind = document.getElementById('reportKind').value;
   const klass = document.getElementById('reportKlasse').value;
-  const columns = selectedReportColumns();
   const report = window.LDEdit.report;
-  const csv = report.toCsv(report.buildTable(model, itemsFor(kind, klass), columns));
+  const table = report.buildTable(model, itemsFor(kind, klass), selectedReportColumns(), { includeResource: reportIncludeUri() });
+  const fmt = reportFormat(document.getElementById('reportFormat').value);
+  const text = fmt.fn(table);
   const base = (fileNameEl.textContent || 'rapportage').replace(/\.(ttl|turtle|txt|shacl)$/i, '') || 'rapportage';
-  const suggested = base + '-rapportage.csv';
+  const suggested = base + '-rapportage.' + fmt.ext;
 
   if(desktop()){
-    desktop().saveCsv(csv, suggested).then(res => {
+    desktop().saveReport(text, suggested, fmt.label, fmt.exts).then(res => {
       if(res && res.saved) closeReportDialog();
     }).catch(() => {});
     return;
   }
-  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const blob = new Blob([text], { type: fmt.mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -3600,6 +3644,150 @@ function exportReport(){
   a.click();
   window.setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
   closeReportDialog();
+}
+
+/* ================= diagrammen ================= */
+
+const DIAGRAM_FORMATS = [
+  ['plantuml', 'PlantUML'],
+  ['mermaid', 'Mermaid'],
+  ['graphml', 'GraphML (yEd)'],
+  ['drawio', 'Draw.IO']
+];
+
+function diagramFormatInfo(format){
+  if(format === 'mermaid') return { fn:'toMermaid', ext:'mmd', mime:'text/plain;charset=utf-8', label:'Mermaid', exts:['mmd','mermaid','txt'] };
+  if(format === 'graphml') return { fn:'toGraphml', ext:'graphml', mime:'application/xml;charset=utf-8', label:'GraphML (yEd)', exts:['graphml','xml'] };
+  if(format === 'drawio') return { fn:'toDrawio', ext:'drawio', mime:'application/xml;charset=utf-8', label:'Draw.IO', exts:['drawio','xml'] };
+  return { fn:'toPlantUml', ext:'puml', mime:'text/plain;charset=utf-8', label:'PlantUML', exts:['puml','plantuml','txt'] };
+}
+
+function diagramIsMim(){ return currentModelType() === 'mim'; }
+function diagramIsOwl(){ return currentModelType() === 'type-ontologie'; }
+
+function openDiagramDialog(){
+  if(!model) return;
+  renderDiagramBody();
+  document.getElementById('diagramOverlay').style.display = 'flex';
+  updateDiagramPreview();
+}
+
+function closeDiagramDialog(){
+  document.getElementById('diagramOverlay').style.display = 'none';
+}
+
+function renderDiagramBody(){
+  const mim = diagramIsMim();
+  const owl = diagramIsOwl();
+  let html = `<div class="report-filters">
+      <div class="report-field">
+        <label for="diagramFormat">Formaat</label>
+        <select id="diagramFormat">${DIAGRAM_FORMATS.map(([v,l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select>
+      </div>`;
+  if(!mim && !owl){
+    html += `<div class="report-field">
+        <label for="diagramKind">Soort</label>
+        <select id="diagramKind">${reportKindOptions(kindFilter)}</select>
+      </div>
+      <div class="report-field">
+        <label for="diagramKlasse">Klasse</label>
+        <select id="diagramKlasse">${classFilterOptions()}</select>
+      </div>`;
+  }
+  html += `</div>
+    <div class="diagram-options">
+      ${mim ? '<label><input type="checkbox" id="diagramStereotypes" checked> MIM-stereotypen tonen</label>' : ''}
+      <label><input type="checkbox" id="diagramDatatypes" checked> Datatypes tonen</label>
+      ${mim ? '' : '<label><input type="checkbox" id="diagramLabels" checked> rdfs:labels i.p.v. CURIEs</label>'}
+    </div>`;
+  document.getElementById('diagramBody').innerHTML = html;
+  if(!mim && !owl) document.getElementById('diagramKlasse').value = classFilter || '';
+  document.querySelectorAll('#diagramBody select, #diagramBody input[type="checkbox"]')
+    .forEach(el => el.addEventListener('change', updateDiagramPreview));
+}
+
+// Voor "overige" modeltypes: welke klassen horen bij de gekozen soort/klasse.
+function diagramClassSet(kind, klass){
+  const items = itemsFor(kind, klass);
+  if(kind === 'classes') return items.filter(u => model.classes.includes(u));
+  const set = new Set();
+  if(kind === 'individuals'){
+    items.forEach(uri => {
+      const node = model.nodes[uri];
+      if(!node) return;
+      [...node.types].forEach(t => { if(!isExcludedCore(t) && model.classes.includes(t)) set.add(t); });
+    });
+  } else {
+    items.forEach(prop => {
+      const node = model.nodes[prop];
+      if(!node) return;
+      node.out.forEach(e => {
+        if((e.p === RDFS + 'domain' || e.p === RDFS + 'range') && e.o.type === 'uri' && model.classes.includes(e.o.value)){
+          set.add(e.o.value);
+        }
+      });
+    });
+  }
+  return [...set];
+}
+
+function diagramOptions(){
+  const opts = { flavor: diagramIsMim() ? 'mim' : 'generic' };
+  const stereotypes = document.getElementById('diagramStereotypes');
+  const datatypes = document.getElementById('diagramDatatypes');
+  const labels = document.getElementById('diagramLabels');
+  opts.stereotypes = stereotypes ? stereotypes.checked : false;
+  opts.showDatatypes = datatypes ? datatypes.checked : true;
+  opts.useLabels = labels ? labels.checked : false;
+  if(opts.flavor !== 'mim' && !diagramIsOwl()){
+    const kind = document.getElementById('diagramKind').value;
+    const klass = document.getElementById('diagramKlasse').value;
+    opts.items = diagramClassSet(kind, klass);
+  }
+  return opts;
+}
+
+function updateDiagramPreview(){
+  const preview = document.getElementById('diagramPreview');
+  const countEl = document.getElementById('diagramCount');
+  if(!model || !preview) return;
+  const dg = window.LDEdit.diagram;
+  const fmt = diagramFormatInfo(document.getElementById('diagramFormat').value);
+  try {
+    const diagram = dg.build(model, diagramOptions());
+    preview.value = dg[fmt.fn](diagram);
+    countEl.textContent = diagram.classes.length
+      ? diagram.classes.length + ' klassen · ' + diagram.associations.length + ' associaties · ' +
+        diagram.generalizations.length + ' generalisaties'
+      : 'Geen klassen gevonden voor deze selectie.';
+  } catch(err){
+    preview.value = '';
+    countEl.textContent = 'Kon het diagram niet maken: ' + err.message;
+  }
+}
+
+function saveDiagram(){
+  const text = document.getElementById('diagramPreview').value;
+  if(!text) return;
+  const fmt = diagramFormatInfo(document.getElementById('diagramFormat').value);
+  const base = (fileNameEl.textContent || 'diagram').replace(/\.(ttl|turtle|txt|shacl)$/i, '') || 'diagram';
+  const suggested = base + '-diagram.' + fmt.ext;
+
+  if(desktop()){
+    desktop().saveReport(text, suggested, fmt.label, fmt.exts, 'Diagram opslaan').then(res => {
+      if(res && res.saved) closeDiagramDialog();
+    }).catch(() => {});
+    return;
+  }
+  const blob = new Blob([text], { type: fmt.mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = suggested;
+  document.body.appendChild(a);
+  a.click();
+  window.setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+  closeDiagramDialog();
 }
 
 function downloadTurtle(){ saveTurtle(false); }
@@ -3684,6 +3872,14 @@ document.getElementById('reportOverlay').addEventListener('click', e => {
   if(e.target.id === 'reportOverlay') closeReportDialog();
 });
 document.addEventListener('ldedit-report', openReportDialog);
+
+// Diagrammen
+document.getElementById('diagramSaveBtn').addEventListener('click', saveDiagram);
+document.getElementById('diagramCloseBtn').addEventListener('click', closeDiagramDialog);
+document.getElementById('diagramOverlay').addEventListener('click', e => {
+  if(e.target.id === 'diagramOverlay') closeDiagramDialog();
+});
+document.addEventListener('ldedit-diagram', openDiagramDialog);
 document.getElementById('createModalBody').addEventListener('keydown', e => {
   if(e.key === 'Enter' && e.target.tagName !== 'BUTTON'){ e.preventDefault(); submitCreate(); }
   else if(e.key === 'Escape'){ e.preventDefault(); closeCreateModal(); }

@@ -52,6 +52,7 @@ npm run dist
 | `js/model.js` | Modelopbouw uit geparseerde triples (nodes, klassen, instanties, labels) |
 | `js/serialize.js` | Turtle-serialisatie (blanco nodes inline, lijsten, opmaak) |
 | `js/report.js` | Rapportage: tabel en CSV-export |
+| `js/diagram.js` | UML-diagrammen: MIM/generiek, met PlantUML/Mermaid/GraphML/Draw.IO-uitvoer |
 | `js/shacl.js` | SHACL-engine: shapes parsen, targets bepalen, constraints en SPARQL-subset evalueren |
 | `shapes/` | De meegeleverde bundels met SHACL-shapes en ontologieën (MIM, NL-SBB, DCAT-AP-NL, FDS-DQV, MDTO) plus `bundles.json` |
 | `test/run-tests.js` | Node-tests |
@@ -216,22 +217,51 @@ shape-tellingen en omschrijving. Daar kun je ook het modeltype kiezen.
   kunt kiezen. Bij **SHACL** geldt dat voor de `sh:`-termen (zoals `sh:path`). Welke namespaces
   dat zijn, staat per modeltype in `shapes/bundles.json` (`keepNamespaces`).
 
-## Rapportage (CSV)
+## Rapportage
 
 Via het menu **Bestand → Rapportage…** (⌘E) maak je een tabel van de resources en exporteer je
-die naar **CSV**.
+die naar **CSV**, een **MediaWiki-tabel**, **HTML** of **Markdown**.
 
 - **Soort** en **Klasse** zijn dezelfde filters als in de zijbalk: instanties, klassen,
   eigenschappen of relaties, en de klasse beperkt de lijst (instanties op `rdf:type`, klassen op
   `rdfs:subClassOf`, eigenschappen/relaties op `rdfs:domain`). Je stelt ze in de rapportage zelf in;
   ze beginnen met de waarden uit de zijbalk.
+- **Formaat** kies je in dezelfde dialoog: CSV, MediaWiki-tabel, HTML of Markdown.
 - **Kolommen** kies je zelf. Standaard staan `skos:prefLabel` en `skos:definition` aan als die in
-  het model voorkomen; anders `rdfs:label` en `rdfs:comment`. Alle overige predicaten uit het model
-  kun je aanvinken.
-- De eerste kolom is altijd de **resource** (de IRI). Heeft een resource meerdere waarden voor een
-  kolom, dan staan ze met `; ` gescheiden in de cel.
-- De CSV is UTF-8 (met BOM, zodat Excel de accenten goed leest), kommagescheiden, met de
-  gebruikelijk quoting voor komma's, aanhalingstekens en regeleinden.
+  het model voorkomen; anders `rdfs:label` en `rdfs:comment` — maar alleen als dat predicaat ook
+  echt in het model gebruikt wordt. Alle overige predicaten uit het model kun je aanvinken.
+- De **URI-kolom** (de resource-IRI) staat vooraan en is met een vinkje aan of uit te zetten.
+- Heeft een resource meerdere waarden voor een kolom, dan staan ze met `; ` gescheiden in de cel.
+- De bestanden worden als UTF-8 weggeschreven. CSV krijgt een BOM (zodat Excel de accenten goed
+  leest), is kommagescheiden en gebruikt de gebruikelijke quoting; de andere formaten escapen
+  pipes, `<`, `>` en regeleinden op de manier die bij dat formaat hoort.
+
+## Diagrammen
+
+Via het menu **Bestand → Diagram…** (⇧⌘D) genereer je een UML-klassediagram van het geopende
+model, met een live preview en de keuze uit vier uitvoerformaten: **PlantUML**, **Mermaid**,
+**GraphML (yEd)** en **Draw.IO**. Je kunt het resultaat met **Opslaan…** wegschrijven (de juiste
+extensie en filter worden per formaat gekozen); het document zelf blijft ongewijzigd.
+
+Wat het diagram bevat hangt af van het gekozen **modeltype**:
+
+- **MIM** — MIM-conform UML: Objecttypen worden klassen met «Objecttype», attribuutsoorten worden
+  attributen (met `mim:type` en `mim:kardinaliteit`), relatiesoorten worden associaties
+  (`mim:bron` → `mim:doel`, label `mim:naam`), en generalisaties worden overerving. Enumeraties,
+  gestructureerde datatypen en referentielijsten krijgen hun waarden/elementen als attributen.
+  Opties: **MIM-stereotypen tonen** en **datatypes tonen**.
+- **OWL/RDFS** — een gewoon UML-klassediagram zonder stereotypen: klassen uit het model,
+  datatype-eigenschappen als attributen (via `rdfs:domain`/`rdfs:range`), objecteigenschappen als
+  associaties en `rdfs:subClassOf` als overerving. Opties: **datatypes tonen** en
+  **rdfs:labels i.p.v. CURIEs**.
+- **Overige modeltypes** (en "geen") — hetzelfde generieke klassediagram, met daarbij de
+  **soort-** en **klassefilter** uit de zijbalk/rapportage: `klassen` → die klassen, `instanties` →
+  de klassen waarvan ze instantie zijn, `eigenschappen`/`relaties` → de klassen die als
+  domein/bereik dienen. Plus dezelfde twee opties.
+
+De knopen worden in een eenvoudig raster geplaatst; yEd en Draw.IO kunnen daarna zelf opnieuw
+indelen. Associaties en generalisaties worden alleen getekend als beide uiteinden in het diagram
+voorkomen.
 
 ## Prefixen en standaardprefix
 
