@@ -352,7 +352,8 @@ ex:R a mim:Relatiesoort ; mim:naam "r" ; mim:bron ex:OT ; mim:doel ex:GGT .
   const mimMermaid = DG.toMermaid(mim);
   check('diagram: Mermaid zonder annotatie-tags', mimMermaid.indexOf('<<') === -1, mimMermaid);
   check('diagram: Mermaid stereotype in label', mimMermaid.includes('["Persoon «Objecttype»"]'), mimMermaid);
-  check('diagram: Mermaid accolade-vrij lid', mimMermaid.includes('+CharacterString naam (id)'), mimMermaid);
+  check('diagram: Mermaid accolade-vrij lid', mimMermaid.includes('+CharacterString naam [id]'), mimMermaid);
+  check('diagram: Mermaid id niet als methode', mimMermaid.indexOf('naam (id)') === -1, mimMermaid);
   check('diagram: Draw.IO', DG.toDrawio(gen).includes('<mxfile') && DG.toDrawio(gen).includes('&lt;b&gt;Dier&lt;/b&gt;'), DG.toDrawio(gen).slice(0, 800));
   check('diagram: GraphML', DG.toGraphml(gen).includes('<graphml') && DG.toGraphml(gen).includes('<y:ShapeNode>'), DG.toGraphml(gen).slice(0, 600));
 })();

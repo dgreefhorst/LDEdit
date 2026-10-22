@@ -314,8 +314,10 @@
       if(c.attributes.length){
         lines.push('class ' + c.id + '["' + label + '"] {');
         c.attributes.forEach(a => {
-          // Accolades in namen ({id}) worden anders als structuur geparsed.
-          const name = a.name.replace(/[{}]/g, ch => (ch === '{' ? '(' : ')'));
+          // Mermaid zet een lid met haakjes in het onderste compartiment
+          // (als methode) en accolades kunnen de parser in de war brengen.
+          // Vierkante haken zijn veilig: het blijft een gewoon attribuut.
+          const name = a.name.replace(/[{}]/g, ch => (ch === '{' ? '[' : ']'));
           lines.push('  +' + ((a.type ? a.type + ' ' : '') + name));
         });
         lines.push('}');
