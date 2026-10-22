@@ -265,6 +265,10 @@ De knopen worden in een eenvoudig raster geplaatst; yEd en Draw.IO kunnen daarna
 indelen. Associaties en generalisaties worden alleen getekend als beide uiteinden in het diagram
 voorkomen.
 
+Een **MIM-model wordt aan de inhoud herkend** (het voorkomen van MIM-modelelementen zoals
+`mim:Objecttype` of `mim:Attribuutsoort`). Ook zonder gekozen modeltype wordt dan automatisch het
+MIM-diagram gebruikt — anders zouden de MIM-metaklassen als gewone klassen in het diagram komen.
+
 ## Prefixen en standaardprefix
 
 Via **Bestand → Prefixen…** (⌘,) beheer je de prefixes. Naast de prefixes uit het bestand

@@ -740,10 +740,10 @@
 <div class="modal-overlay" id="reportOverlay" style="display:none;">
   <div class="modal">
     <h3 class="modal-title">Rapportage</h3>
-    <p class="edit-hint" style="margin:0 0 12px;">Kies de kolommen en de filters en exporteer de tabel naar CSV.</p>
+    <p class="edit-hint" style="margin:0 0 12px;">Kies de kolommen, de filters en het formaat en exporteer de tabel.</p>
     <div id="reportBody"></div>
     <div class="modal-actions">
-      <button type="button" class="btn primary" id="reportExportBtn">Exporteer CSV</button>
+      <button type="button" class="btn primary" id="reportExportBtn">Exporteer</button>
       <button type="button" class="rel-picker-cancel" id="reportCancelBtn">Annuleren</button>
     </div>
   </div>
@@ -3662,8 +3662,24 @@ function diagramFormatInfo(format){
   return { fn:'toPlantUml', ext:'puml', mime:'text/plain;charset=utf-8', label:'PlantUML', exts:['puml','plantuml','txt'] };
 }
 
-function diagramIsMim(){ return currentModelType() === 'mim'; }
+function diagramIsMim(){ return currentModelType() === 'mim' || diagramDetectMim(); }
 function diagramIsOwl(){ return currentModelType() === 'type-ontologie'; }
+
+// Herkent een MIM-model aan de inhoud: komen er MIM-modelelementen in voor, dan
+// gebruiken we het MIM-diagram, ook als er geen (of een ander) modeltype is
+// gekozen. Zonder deze detectie zou de generieke bouwer de MIM-metaklassen
+// (Objecttype, Attribuutsoort, ...) als gewone klassen tonen.
+const MIM_NS = 'http://modellen.mim-standaard.nl/def/mim#';
+const MIM_MODEL_KINDS = ['Objecttype', 'Gegevensgroeptype', 'Relatiesoort', 'Relatieklasse',
+  'Attribuutsoort', 'Enumeratie', 'Referentielijst', 'Codelijst'];
+
+function diagramDetectMim(){
+  if(!model) return false;
+  return Object.keys(model.nodes).some(uri => {
+    const node = model.nodes[uri];
+    return Boolean(node) && MIM_MODEL_KINDS.some(k => node.types.has(MIM_NS + k));
+  });
+}
 
 function openDiagramDialog(){
   if(!model) return;
@@ -3705,6 +3721,10 @@ function renderDiagramBody(){
       ${mim ? '' : '<label><input type="checkbox" id="diagramLabels" checked> rdfs:labels i.p.v. CURIEs</label>'}
     </div>`;
   document.getElementById('diagramBody').innerHTML = html;
+  if(mim && currentModelType() !== 'mim'){
+    document.getElementById('diagramBody').insertAdjacentHTML('beforeend',
+      '<div class="report-count">MIM-model gedetecteerd — het MIM-diagram wordt gebruikt.</div>');
+  }
   if(!mim && !owl){
     // Alleen klassen en instanties zijn zinvol in een klassediagram; een
     // eigenschappen-/relatiefilter uit de zijbalk valt terug op instanties.
