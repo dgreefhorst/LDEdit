@@ -638,6 +638,38 @@
     margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
   .welcome-empty{padding:14px 6px;font-size:13px;color:var(--ink-soft);}
+
+  /* Weergave-toggles: URI's zijn standaard verborgen en bewerken staat uit. */
+  .view-tools{
+    display:flex;
+    gap:6px;
+    padding:8px 12px;
+    border-bottom:1px solid var(--line);
+  }
+  .mini-toggle{
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--ink-soft);
+    font-size:11px;
+    font-family:var(--sans);
+    padding:3px 9px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:border-color .15s, background .15s, color .15s;
+  }
+  .mini-toggle:hover{border-color:var(--accent);color:var(--accent);}
+  .mini-toggle.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+
+  .list-item .sub{display:none;}
+  .prop-row .pname .puri{display:none;}
+  .pval-link .pv-uri{display:none;}
+  .detail .uri{display:none;}
+  .lang-tag{display:none;}
+  body.show-uris .list-item .sub{display:block;}
+  body.show-uris .prop-row .pname .puri{display:block;}
+  body.show-uris .pval-link .pv-uri{display:block;}
+  body.show-uris .detail .uri{display:block;}
+  body.show-uris .lang-tag{display:inline;}
 </style>
 </head>
 <body>
@@ -800,6 +832,9 @@ let hasUnsavedChanges = false;
 // Formaat van het geopende document: 'turtle' of 'trig'. Bepaalt of bij
 // opslaan de platte Turtle- of de TriG-weergave (met named graphs) wordt gebruikt.
 let documentFormat = 'turtle';
+// Weergave-instellingen: URI's standaard verborgen, bewerken standaard uit.
+let showUris = false;
+let editMode = false;
 // Blanco nodes die je in deze sessie aanmaakt: die hebben nog geen eigen
 // uitspraken en zouden dus buiten de lijst vallen. Onthoud ze, zodat ze in de
 // lijst staan om aan te vullen.
@@ -1469,6 +1504,10 @@ function renderApp(){
 
   app.innerHTML = `
     <div class="sidebar">
+      <div class="view-tools">
+        <button type="button" class="mini-toggle${showUris ? ' active' : ''}" id="toggleUris" aria-pressed="${showUris}" title="Toon URI's in de lijst en bij de eigenschappen">URI's</button>
+        <button type="button" class="mini-toggle${editMode ? ' active' : ''}" id="toggleEdit" aria-pressed="${editMode}" title="Bewerkmodus: waarden en structuur aanpassen">Bewerken</button>
+      </div>
       <div class="filters">
         <label for="kindFilter">Filter op soort</label>
         <select id="kindFilter">
@@ -1489,7 +1528,7 @@ function renderApp(){
         <label for="bundleSelect">Modeltype</label>
         <div class="bundle-row">
           <select id="bundleSelect">${bundleSelectOptions()}</select>
-          <button type="button" class="btn" id="addItemBtn">+ Nieuwe resource</button>
+          ${editMode ? '<button type="button" class="btn" id="addItemBtn">+ Nieuwe resource</button>' : ''}
         </div>
       </div>
       <div class="list" id="listEl"></div>
@@ -1527,11 +1566,30 @@ function renderApp(){
   searchInput.value = searchQuery;
   searchInput.selectionStart = searchInput.selectionEnd = searchQuery.length;
 
-  document.getElementById('addItemBtn').addEventListener('click', openCreateItemModal);
+  const addItemBtn = document.getElementById('addItemBtn');
+  if(addItemBtn) addItemBtn.addEventListener('click', openCreateItemModal);
+
+  document.getElementById('toggleUris').addEventListener('click', () => {
+    showUris = !showUris;
+    applyViewClasses();
+    document.getElementById('toggleUris').classList.toggle('active', showUris);
+    document.getElementById('toggleUris').setAttribute('aria-pressed', String(showUris));
+  });
+  document.getElementById('toggleEdit').addEventListener('click', () => {
+    editMode = !editMode;
+    applyViewClasses();
+    renderApp();
+  });
 
   updateStatus();
   renderList();
   renderDetail();
+}
+
+// Zet de weergaveklassen op <body> (URI's tonen) en werkt de status bij.
+function applyViewClasses(){
+  document.body.classList.toggle('show-uris', showUris);
+  document.body.classList.toggle('edit-mode', editMode);
 }
 
 function classFilterOptions(){
@@ -1677,7 +1735,11 @@ function renderDetail(){
   currentListContexts = [];
   currentListItemRemovals = [];
   if(!selectedId){
-    detailEl.innerHTML = '<div class="detail-empty">Selecteer een item in de lijst.<br>Waarden zijn direct te bewerken; overtredingen van de SHACL-shapes worden gemarkeerd.</div>';
+    detailEl.innerHTML = '<div class="detail-empty">Selecteer een item in de lijst.<br>' +
+      (editMode
+        ? 'Waarden zijn direct te bewerken; overtredingen van de SHACL-shapes worden gemarkeerd.'
+        : 'Zet <strong>Bewerken</strong> aan om waarden en structuur aan te passen; overtredingen van de SHACL-shapes worden gemarkeerd.') +
+      '</div>';
     return;
   }
   const uri = selectedId;
@@ -1696,7 +1758,12 @@ function renderDetail(){
   const missingPaths = {};
   missing.forEach(r => { if(r.path) missingPaths[r.path] = r; });
 
-  let html = `<div class="detail-topbar"><span class="detail-kind">${esc(kind)}</span><button type="button" class="btn" id="resourceTtlBtn" title="Bekijk en bewerk de TTL van deze resource">TTL</button></div>`;
+  // De soort-badge (Instantie/Klasse/Eigenschap/Relatie) tonen we niet; die
+  // volgt al uit de lijst en het filter. De TTL-knop hoort bij de bewerkmodus.
+  let html = '';
+  if(editMode){
+    html += `<div class="detail-topbar"><button type="button" class="btn" id="resourceTtlBtn" title="Bekijk en bewerk de TTL van deze resource">TTL</button></div>`;
+  }
   let headingLabel = null, headingPred = null, headingTerm = null;
   const prefLabel = node.out.find(o => o.p === 'http://www.w3.org/2004/02/skos/core#prefLabel' && o.o.type === 'literal');
   const rdfsLabel = node.out.find(o => o.p === RDFS+'label' && o.o.type === 'literal');
@@ -1704,9 +1771,13 @@ function renderDetail(){
   else if(rdfsLabel){ headingLabel = rdfsLabel.o.value; headingPred = 'rdfs:label'; headingTerm = rdfsLabel.o; }
 
   if(headingTerm){
-    const idx = currentEditableTerms.length;
-    currentEditableTerms.push(headingTerm);
-    html += `<div class="detail-heading"><h2 class="editable-title" contenteditable="true" spellcheck="false" data-eidx="${idx}">${esc(headingLabel)}</h2>`;
+    if(editMode){
+      const idx = currentEditableTerms.length;
+      currentEditableTerms.push(headingTerm);
+      html += `<div class="detail-heading"><h2 class="editable-title" contenteditable="true" spellcheck="false" data-eidx="${idx}">${esc(headingLabel)}</h2>`;
+    } else {
+      html += `<div class="detail-heading"><h2>${esc(headingLabel)}</h2>`;
+    }
     if(headingPred) html += `<span class="detail-label-pred">${esc(headingPred)}</span>`;
     html += `</div>`;
   } else {
@@ -1714,14 +1785,6 @@ function renderDetail(){
   }
   const cur = model.curie(uri);
   html += cur !== uri ? `<div class="uri">${esc(cur)} · ${esc(uri)}</div>` : `<div class="uri">${esc(uri)}</div>`;
-
-  const types = [...node.types].filter(t => !isExcludedCore(t));
-  if(types.length){
-    html += `<div class="detail-heading" style="margin-bottom:18px;">
-      <span class="detail-label-pred">klasse</span>
-      ${types.sort((a,b) => labelOf(a).localeCompare(labelOf(b))).map(t => `<a class="pval-link" data-uri="${esc(t)}">${esc(labelOf(t))}</a>`).join(', ')}
-    </div>`;
-  }
 
   const description = descOf(uri);
   if(description) html += `<p class="detail-description">${esc(description)}</p>`;
@@ -1737,7 +1800,7 @@ function renderDetail(){
         <div class="pname">${esc(rawLabelOf(p))}<span class="puri">${esc(curieOf(p))}</span></div>
         <div class="pvals">
           <div class="vmsg">${esc(r.message)}</div>
-          <button type="button" class="btn missing-add" data-path="${esc(p)}" style="align-self:flex-start;margin-top:4px;">+ Toevoegen</button>
+          ${editMode ? `<button type="button" class="btn missing-add" data-path="${esc(p)}" style="align-self:flex-start;margin-top:4px;">+ Toevoegen</button>` : ''}
         </div>
       </div>`;
     });
@@ -1770,8 +1833,10 @@ function renderDetail(){
     html += '</div>';
   }
 
-  html += `<button type="button" class="btn add-prop-btn" id="addPropBtn" data-subject="${esc(uri)}">+ Eigenschap of relatie toevoegen</button>`;
-  html += `<div><button type="button" class="danger-btn" id="deleteResourceBtn">Verwijder deze ${esc(kind.toLowerCase())}</button></div>`;
+  if(editMode){
+    html += `<button type="button" class="btn add-prop-btn" id="addPropBtn" data-subject="${esc(uri)}">+ Eigenschap of relatie toevoegen</button>`;
+    html += `<div><button type="button" class="danger-btn" id="deleteResourceBtn">Verwijder deze ${esc(kind.toLowerCase())}</button></div>`;
+  }
 
   detailEl.innerHTML = html;
   detailEl.scrollTop = lastScrollTop;
@@ -1911,13 +1976,14 @@ function outRowsHtml(subjectUri, byPath, editable, ctx){
 
 function valHtml(term, editable, subjectUri, predicateUri, invalid, ctx){
   ctx = ctx || { depth:0, stack:[] };
+  const canEdit = editable && editMode;
   if(term.type === 'literal'){
     let extra = '';
     // Een taal-tag maakt van de literal een rdf:langString; als de shape een
     // ander datatype eist (bv. xsd:string) is dat een overtreding. Bied de
     // taalkeuze dan niet aan en markeer een bestaande taal-tag.
     const langBlocked = (subjectUri && predicateUri) ? languageBlockedBy(subjectUri, predicateUri) : null;
-    if(editable && !langBlocked && (term.lang || !term.datatype || term.datatype === XSD+'string')){
+    if(canEdit && !langBlocked && (term.lang || !term.datatype || term.datatype === XSD+'string')){
       const langIdx = currentEditableLangs.length;
       currentEditableLangs.push(term);
       const current = term.lang || '';
@@ -1932,7 +1998,7 @@ function valHtml(term, editable, subjectUri, predicateUri, invalid, ctx){
     else if(term.datatype && term.datatype !== XSD+'string') extra = `<span class="lang-tag">${esc(curieOf(term.datatype))}</span>`;
     const isDesc = predicateUri && DESC_PREDS.includes(predicateUri);
     const valClass = isDesc ? 'pval pval-description' : 'pval';
-    if(editable){
+    if(canEdit){
       const idx = currentEditableTerms.length;
       currentEditableTerms.push(term);
       let delBtn = '';
@@ -1947,12 +2013,14 @@ function valHtml(term, editable, subjectUri, predicateUri, invalid, ctx){
   }
   const uri = term.value;
   if(term.type === 'bnode'){
+    // Blanco nodes klappen ook in de leesweergave uit; alleen de
+    // bewerkingsknoppen hangen van de bewerkmodus af.
     if(!editable) return bnodeLinkHtml(uri);
     if(isListHead(uri)) return listValueHtml(term, subjectUri, predicateUri, ctx);
     return bnodeValueHtml(term, subjectUri, predicateUri, ctx);
   }
   const linkHtml = `<a class="pval-link" data-uri="${esc(uri)}">${esc(labelOf(uri))}<span class="pv-uri">${esc(curieOf(uri))}</span></a>`;
-  if(editable){
+  if(canEdit){
     const relIdx = currentEditableRels.length;
     currentEditableRels.push({ term, subjectUri, predicateUri });
     const delIdx = currentDeletables.length;
@@ -2018,23 +2086,30 @@ function listValueHtml(term, subjectUri, predicateUri, ctx){
   const headUri = term.value;
   const chain = listChainIds(headUri);
   const items = listItems(headUri);
-  const delIdx = currentDeletables.length;
-  currentDeletables.push({ term, subjectUri, predicateUri, mode:'list' });
-  const addIdx = currentListContexts.length;
-  currentListContexts.push({ headUri, subjectUri, predicateUri, headTerm: term });
+  let delBtn = '';
+  let addBtn = '';
+  if(editMode){
+    const delIdx = currentDeletables.length;
+    currentDeletables.push({ term, subjectUri, predicateUri, mode:'list' });
+    const addIdx = currentListContexts.length;
+    currentListContexts.push({ headUri, subjectUri, predicateUri, headTerm: term });
+    addBtn = `<button type="button" class="rdf-item-btn rdf-item-add" data-lidx="${addIdx}" title="Item toevoegen">+</button>`;
+    delBtn = `<button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze lijst">×</button>`;
+  }
   const innerStack = ctx.stack.concat(chain);
   const inner = items.length
     ? items.map(it => {
+        const value = listItemHtml(it, { depth:ctx.depth, stack:innerStack });
+        if(!editMode) return `<span class="rdf-item">${value}</span>`;
         const rIdx = currentListItemRemovals.length;
         currentListItemRemovals.push({ headUri, subjectUri, predicateUri, headTerm: term, ownerUri: it.ownerUri });
-        const value = listItemHtml(it, { depth:ctx.depth, stack:innerStack });
         return `<span class="rdf-item">${value}<button type="button" class="rdf-item-btn rdf-item-remove" data-lidx="${rIdx}" title="Dit item uit de lijst halen">×</button></span>`;
       }).join('<span class="rdf-list-sep">,</span>')
     : '<span class="rdf-list-empty">leeg</span>';
   return `<div class="rel-wrap">
     <span class="rdf-list"><span class="rdf-list-sep">(</span>${inner}<span class="rdf-list-sep">)</span></span>
-    <button type="button" class="rdf-item-btn rdf-item-add" data-lidx="${addIdx}" title="Item toevoegen">+</button>
-    <button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze lijst">×</button>
+    ${addBtn}
+    ${delBtn}
   </div>`;
 }
 
@@ -2043,12 +2118,15 @@ function bnodeValueHtml(term, subjectUri, predicateUri, ctx){
   const bnodeId = term.value;
   const inStack = ctx.stack.indexOf(bnodeId) !== -1;
   const expanded = !inStack && bnodeIsExpanded(bnodeId, ctx.depth + 1);
-  const relIdx = currentEditableRels.length;
-  currentEditableRels.push({ term, subjectUri, predicateUri });
+  let relIdx = -1;
+  if(editMode){
+    relIdx = currentEditableRels.length;
+    currentEditableRels.push({ term, subjectUri, predicateUri });
+  }
   const delIdx = currentDeletables.length;
   // In een RDF-collectie regelt het item zelf het verwijderen (met herschakelen
   // van de keten), dus daar geen eigen × op de blanco node.
-  const ownDelete = !ctx.inListItem;
+  const ownDelete = editMode && !ctx.inListItem;
   if(ownDelete) currentDeletables.push({ term, subjectUri, predicateUri, mode:'bnode' });
 
   const toggle = inStack
@@ -2056,8 +2134,8 @@ function bnodeValueHtml(term, subjectUri, predicateUri, ctx){
     : `<button type="button" class="bnode-toggle" data-bnode="${esc(bnodeId)}" data-expanded="${expanded ? '1' : '0'}" title="${expanded ? 'Inklappen' : 'Uitklappen'}">${expanded ? '▾' : '▸'}</button>`;
 
   let html = `<div class="bnode-block">
-    <div class="bnode-head rel-wrap" data-relidx="${relIdx}">${toggle}${bnodeLinkHtml(bnodeId)}
-      <button type="button" class="rel-edit-btn" data-relidx="${relIdx}" title="Wijzig verwijzing">✎</button>
+    <div class="bnode-head rel-wrap"${editMode ? ` data-relidx="${relIdx}"` : ''}>${toggle}${bnodeLinkHtml(bnodeId)}
+      ${editMode ? `<button type="button" class="rel-edit-btn" data-relidx="${relIdx}" title="Wijzig verwijzing">✎</button>` : ''}
       ${ownDelete ? `<button type="button" class="val-delete-btn" data-delidx="${delIdx}" title="Verwijder deze blanco node en zijn eigenschappen">×</button>` : ''}
     </div>`;
 
@@ -2073,7 +2151,7 @@ function bnodeValueHtml(term, subjectUri, predicateUri, ctx){
     } else {
       html += '<div class="rdf-list-empty">Nog geen eigenschappen.</div>';
     }
-    html += `<button type="button" class="btn add-prop-btn" data-subject="${esc(bnodeId)}">+ Eigenschap of relatie toevoegen</button>`;
+    if(editMode) html += `<button type="button" class="btn add-prop-btn" data-subject="${esc(bnodeId)}">+ Eigenschap of relatie toevoegen</button>`;
     html += '</div>';
   }
   html += '</div>';

@@ -66,6 +66,16 @@ elkaar, zodat er zoveel mogelijk ruimte voor de lijst overblijft. Het **aantal i
 huidige selectie staat in de titelbalk** van het venster, samen met het aantal triples, het
 aantal actieve shapes en het bestand dat open staat.
 
+Bovenaan de zijbalk staan twee kleine schakelaars:
+
+- **URI's** — standaard verborgen. Zet je hem aan, dan verschijnen de verkorte namen/URI's
+  onder de items in de lijst, onder de eigenschapsnamen, onder verwijzingen en onder de
+  titel in het detail. Ook de taal-tags (`@nl`) en datatype-indicaties (`xsd:date`, …)
+  bij waarden worden dan getoond; standaard blijven die weg.
+- **Bewerken** — standaard uit (leesweergave). Zet je hem aan, dan verschijnen de
+  bewerkknoppen (waarden aanpassen, taal wijzigen, ✎/×, eigenschappen toevoegen, nieuwe
+  resources, TTL-editor en verwijderen). De schakelaar geldt voor de hele weergave.
+
 - **Filter op soort** — toont Instanties, Klassen, Eigenschappen of Relaties.
 - **Filter op klasse** — beperkt de lijst tot één klasse. Het filter werkt per soort:
   instanties op hun `rdf:type` (inclusief subklassen), klassen op `rdfs:subClassOf`, en
