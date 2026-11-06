@@ -20,7 +20,9 @@
 
   const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
   const RDFS = 'http://www.w3.org/2000/01/rdf-schema#';
-  const MIM = 'http://modellen.mim-standaard.nl/def/mim#';
+  // MIM komt in het wild in twee vormen voor: met http en '#', en met https en
+  // '/'. Beide zijn dezelfde namespace, dus herkennen we ze allebei.
+  const MIM_NS_RE = /^https?:\/\/modellen\.mim-standaard\.nl\/def\/mim[#/]/;
 
   // MIM-metaklassen die als klasse in het diagram verschijnen (meest specifiek eerst).
   const MIM_CLASS_KINDS = [
@@ -42,10 +44,35 @@
     return s || 'x';
   }
 
+  function mimLocal(uri){
+    const s = String(uri);
+    return MIM_NS_RE.test(s) ? s.replace(MIM_NS_RE, '') : null;
+  }
+
+  function isMim(uri, local){
+    return mimLocal(uri) === local;
+  }
+
   function outValues(model, uri, predicate){
     const node = model.nodes[uri];
     if(!node) return [];
     return node.out.filter(e => e.p === predicate).map(e => e.o);
+  }
+
+  function mimValues(model, uri, local){
+    const node = model.nodes[uri];
+    if(!node) return [];
+    return node.out.filter(e => isMim(e.p, local)).map(e => e.o);
+  }
+
+  function firstMimUri(model, uri, local){
+    const hit = mimValues(model, uri, local).find(o => o.type === 'uri' || o.type === 'bnode');
+    return hit ? hit.value : null;
+  }
+
+  function firstMimLiteral(model, uri, local){
+    const hit = mimValues(model, uri, local).find(o => o.type === 'literal');
+    return hit ? hit.value : null;
   }
 
   function firstUriValue(model, uri, predicate){
