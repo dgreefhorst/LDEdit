@@ -263,16 +263,6 @@
   }
   .detail-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;}
   .detail-heading h2{margin-bottom:0;}
-  .detail-label-pred{
-    font-size:11px;
-    font-weight:600;
-    color:var(--accent);
-    background:var(--accent-soft);
-    padding:2px 7px;
-    border-radius:2px;
-    white-space:nowrap;
-  }
-
   .section-title{font-size:13px;font-weight:600;color:var(--ink);margin:30px 0 4px;}
 
   .prop-table{border-top:1px solid var(--line);}
@@ -828,6 +818,8 @@ let selectedId = null;
 let searchQuery = '';
 let classFilter = '';
 let kindFilter = 'individuals';
+// Eerder bekeken detailpagina's, zodat ← terug kan (met de filters van toen).
+let navHistory = [];
 let hasUnsavedChanges = false;
 // Formaat van het geopende document: 'turtle' of 'trig'. Bepaalt of bij
 // opslaan de platte Turtle- of de TriG-weergave (met named graphs) wordt gebruikt.
@@ -1306,6 +1298,7 @@ async function loadFile(file){
     searchQuery = '';
     classFilter = '';
     kindFilter = 'individuals';
+    navHistory = [];
     hasUnsavedChanges = false;
     rebuildOptions();
     downloadBtn.style.display = 'inline-block';
@@ -1423,6 +1416,7 @@ function createNewModel(prefix, namespace, filename){
   searchQuery = '';
   classFilter = '';
   kindFilter = 'individuals';
+  navHistory = [];
   hasUnsavedChanges = false;
   rebuildOptions();
   fileNameEl.textContent = filename;
@@ -1701,6 +1695,7 @@ function renderList(){
 
   listEl.querySelectorAll('.list-item').forEach(el => {
     el.addEventListener('click', () => {
+      if(el.dataset.uri !== selectedId) pushNavigation(el.dataset.uri);
       selectedId = el.dataset.uri;
       renderDetail();
       listEl.querySelectorAll('.list-item').forEach(x => x.classList.remove('selected'));
@@ -1764,11 +1759,11 @@ function renderDetail(){
   if(editMode){
     html += `<div class="detail-topbar"><button type="button" class="btn" id="resourceTtlBtn" title="Bekijk en bewerk de TTL van deze resource">TTL</button></div>`;
   }
-  let headingLabel = null, headingPred = null, headingTerm = null;
+  let headingLabel = null, headingTerm = null;
   const prefLabel = node.out.find(o => o.p === 'http://www.w3.org/2004/02/skos/core#prefLabel' && o.o.type === 'literal');
   const rdfsLabel = node.out.find(o => o.p === RDFS+'label' && o.o.type === 'literal');
-  if(prefLabel){ headingLabel = prefLabel.o.value; headingPred = 'skos:prefLabel'; headingTerm = prefLabel.o; }
-  else if(rdfsLabel){ headingLabel = rdfsLabel.o.value; headingPred = 'rdfs:label'; headingTerm = rdfsLabel.o; }
+  if(prefLabel){ headingLabel = prefLabel.o.value; headingTerm = prefLabel.o; }
+  else if(rdfsLabel){ headingLabel = rdfsLabel.o.value; headingTerm = rdfsLabel.o; }
 
   if(headingTerm){
     if(editMode){
@@ -1778,7 +1773,6 @@ function renderDetail(){
     } else {
       html += `<div class="detail-heading"><h2>${esc(headingLabel)}</h2>`;
     }
-    if(headingPred) html += `<span class="detail-label-pred">${esc(headingPred)}</span>`;
     html += `</div>`;
   } else {
     html += `<h2 class="resource-title">${esc(node.isBnode ? 'blanco node' : rawLabelOf(uri))}</h2>`;
@@ -2188,6 +2182,7 @@ function kindForUri(uri){
 }
 
 function navigateTo(uri){
+  if(uri !== selectedId) pushNavigation(uri);
   selectedId = uri;
   searchQuery = '';
   classFilter = '';
@@ -2195,6 +2190,38 @@ function navigateTo(uri){
   renderApp();
   const sel = document.querySelector(`.list-item[data-uri="${cssEscape(uri)}"]`);
   if(sel) sel.scrollIntoView({ block:'nearest' });
+}
+
+/* ================= navigatie-historie ================= */
+
+// De weergavestand van de huidige detailpagina, inclusief de filters, zodat we
+// die bij terug precies kunnen herstellen.
+function currentViewState(){
+  return { selectedId, kindFilter, classFilter, searchQuery };
+}
+
+// Onthoudt de pagina die nu zichtbaar is voordat we naar `uri` gaan.
+function pushNavigation(uri){
+  if(!selectedId || selectedId === uri) return;
+  navHistory.push(currentViewState());
+}
+
+// Ga terug naar de vorige detailpagina (met de filters van toen). Blijft
+// doorlopen tot een pagina bestaat; verwijderde resources worden overgeslagen.
+function goBackInHistory(){
+  while(navHistory.length){
+    const state = navHistory.pop();
+    if(state.selectedId && !model.nodes[state.selectedId]) continue;
+    selectedId = state.selectedId;
+    kindFilter = state.kindFilter;
+    classFilter = state.classFilter;
+    searchQuery = state.searchQuery;
+    renderApp();
+    const sel = selectedId ? document.querySelector(`.list-item[data-uri="${cssEscape(selectedId)}"]`) : null;
+    if(sel) sel.scrollIntoView({ block:'nearest' });
+    return true;
+  }
+  return false;
 }
 
 /* ================= relatie-bewerken ================= */
@@ -4009,6 +4036,17 @@ document.addEventListener('ldedit-diagram', openDiagramDialog);
 document.getElementById('createModalBody').addEventListener('keydown', e => {
   if(e.key === 'Enter' && e.target.tagName !== 'BUTTON'){ e.preventDefault(); submitCreate(); }
   else if(e.key === 'Escape'){ e.preventDefault(); closeCreateModal(); }
+});
+
+// ← gaat terug naar de vorige detailpagina. Niet tijdens typen of terwijl er
+// een dialoog open staat.
+document.addEventListener('keydown', e => {
+  if(e.key !== 'ArrowLeft' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  const t = e.target;
+  if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if(document.querySelector('.modal-overlay[style*="flex"]')) return;
+  if(!model || !navHistory.length) return;
+  if(goBackInHistory()) e.preventDefault();
 });
 document.getElementById('emptyStateNewModelBtn').addEventListener('click', (e) => { e.preventDefault(); startNewModel(); });
 

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
@@ -293,9 +293,16 @@ function fileFromArgv(argv) {
 
 function createWindow() {
   windowReady = false;
+  // Met --fullscreen vult het venster het werkgebied van het scherm (dus de
+  // breedte en hoogte van het scherm, zonder de menubalk/dock te verbergen).
+  const windowBounds = process.argv.includes('--fullscreen')
+    ? (() => {
+        const area = screen.getPrimaryDisplay().workArea;
+        return { x: area.x, y: area.y, width: area.width, height: area.height };
+      })()
+    : { width: 1280, height: 860 };
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    ...windowBounds,
     minWidth: 720,
     minHeight: 480,
     title: APP_NAME,

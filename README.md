@@ -66,6 +66,10 @@ elkaar, zodat er zoveel mogelijk ruimte voor de lijst overblijft. Het **aantal i
 huidige selectie staat in de titelbalk** van het venster, samen met het aantal triples, het
 aantal actieve shapes en het bestand dat open staat.
 
+Met **←** (pijltje naar links) ga je terug naar de detailpagina die daarvoor zichtbaar
+was, en met herhaald indrukken verder terug. Dat werkt niet tijdens typen of terwijl er
+een dialoog open staat.
+
 Bovenaan de zijbalk staan twee kleine schakelaars:
 
 - **URI's** — standaard verborgen. Zet je hem aan, dan verschijnen de verkorte namen/URI's
