@@ -48,9 +48,9 @@ npm run dist
 | `main.js` | Hoofdproces: venster, menu, openen/opslaan, recente bestanden, SHACL-bundels en -selectie |
 | `preload.js` | Brug tussen hoofdproces en pagina |
 | `ldedit.html` | De eigenlijke weergave/beheerder (zijbalk met filters, shapes-beheer, validatieweergave) |
-| `js/turtle.js` | Turtle/RDF-parser (gedeeld met de tests) |
+| `js/turtle.js` | Turtle/TriG/RDF-parser (gedeeld met de tests) |
 | `js/model.js` | Modelopbouw uit geparseerde triples (nodes, klassen, instanties, labels) |
-| `js/serialize.js` | Turtle-serialisatie (blanco nodes inline, lijsten, opmaak) |
+| `js/serialize.js` | Turtle- en TriG-serialisatie (blanco nodes inline, lijsten, named graphs, opmaak) |
 | `js/report.js` | Rapportage: tabel en CSV-export |
 | `js/diagram.js` | UML-diagrammen: MIM/generiek, met PlantUML/Mermaid/GraphML/Draw.IO-uitvoer |
 | `js/shacl.js` | SHACL-engine: shapes parsen, targets bepalen, constraints en SPARQL-subset evalueren |
@@ -167,6 +167,24 @@ De uitvoer houdt de structuur van het bestand zoveel mogelijk intact:
 Let op: **commentaar blijft niet bewaard** en de opmaak wordt genormaliseerd. Bewerk daarom een
 bestand met veel toelichtende comments liever niet via de app, of gebruik **Opslaan als…** naar
 een kopie.
+
+## TriG (named graphs)
+
+Naast Turtle kun je **TriG-bestanden** (`.trig`) openen en opslaan. TriG is Turtle
+met **named graphs**: `<graph> { … }`, `GRAPH <graph> { … }`, `_:graph { … }` of een
+los blok `{ … }` voor de standaardgraph.
+
+- Bij **openen** worden alle triples ingelezen, ongeacht de graph. De weergave,
+  filters, validatie en rapportage werken dus hetzelfde als bij een Turtle-bestand.
+- Bij **opslaan** van een `.trig`-bestand worden de triples weer per graph
+  weggeschreven: de standaardgraph bovenaan en elke named graph in een eigen blok.
+- **Nieuwe of bewerkte triples** van een resource komen in dezelfde graph als de
+  bestaande triples van die resource; is die er niet, dan in de standaardgraph.
+- Met **Opslaan als…** kun je tussen de formaten kiezen: de gekozen extensie
+  (`.trig` of `.ttl`) bepaalt of er TriG dan wel platte Turtle wordt geschreven.
+  Bij de platte Turtle-uitvoer vervallen de graph-namen.
+- **Bestand → TTL/TriG-preview…** (⇧⌘P) toont de uitvoer in het formaat van het
+  huidige document.
 
 ## TTL bekijken en bewerken
 

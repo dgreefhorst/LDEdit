@@ -1,9 +1,11 @@
-/* Turtle/RDF parser — gedeeld tussen de app (browser) en de Node-tests.
+/* Turtle/TriG/RDF parser — gedeeld tussen de app (browser) en de Node-tests.
    Hand-geschreven tokenizer + recursive-descent parser voor een praktische
-   subset van Turtle: @prefix/@base, PN-prefixed names, volledige IRIs, blank
-   nodes (gelabeld en [...] anoniem), RDF-collecties (...), getypeerde en
+   subset van Turtle én TriG: @prefix/@base, PN-prefixed names, volledige IRIs,
+   blank nodes (gelabeld en [...] anoniem), RDF-collecties (...), getypeerde en
    taal-getagde literals incl. triple-quoted multi-line strings, 'a', ';' en
-   ',' lijst-continuaties, commentaar. */
+   ',' lijst-continuaties, commentaar. TriG voegt named graphs toe:
+   `GRAPH <g> { … }`, `<g> { … }`, `_:g { … }` of een blok `{ … }` voor de
+   standaardgraph. Elke triple in een named graph krijgt een `g`-term. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -17,10 +19,19 @@
   function parseTurtle(text) {
     const prefixes = {};
     let base = null;
-    const triples = []; // {s,p,o} elk als {type:'uri'|'bnode'|'literal', value, datatype, lang}
+    const triples = []; // {s,p,o,g?} elk als {type:'uri'|'bnode'|'literal', value, datatype, lang}
     let i = 0;
     const n = text.length;
     let bnodeCounter = 0;
+    // Huidige named graph (TriG); null betekent de standaardgraph.
+    let graph = null;
+
+    // Voegt een triple toe en onthoudt in welke graph hij staat (TriG).
+    function emit(s, p, o) {
+      const triple = { s, p, o };
+      if (graph) triple.g = graph;
+      triples.push(triple);
+    }
 
     function error(msg) {
       const upto = text.slice(0, i);
@@ -214,12 +225,12 @@
         const b = { type: 'bnode', value: '_:coll' + (++bnodeCounter) };
         if (k === 0) headBnode = b;
         if (prevBnode) {
-          triples.push({ s: prevBnode, p: { type: 'uri', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest' }, o: b });
+          emit(prevBnode, { type: 'uri', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest' }, b);
         }
-        triples.push({ s: b, p: { type: 'uri', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#first' }, o: items[k] });
+        emit(b, { type: 'uri', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#first' }, items[k]);
         prevBnode = b;
       }
-      triples.push({ s: prevBnode, p: { type: 'uri', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest' }, o: { type: 'uri', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil' } });
+      emit(prevBnode, { type: 'uri', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest' }, { type: 'uri', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil' });
       return headBnode;
     }
 
@@ -301,7 +312,7 @@
         // objectlijst
         while (true) {
           const obj = parseObjectTerm();
-          triples.push({ s: subj, p: pred, o: obj });
+          emit(subj, pred, obj);
           skipWS();
           if (text[i] === ',') { i++; skipWS(); continue; }
           break;
@@ -315,6 +326,51 @@
         }
         return;
       }
+    }
+
+    // "GRAPH" als los keyword (niet als prefixnaam zoals graph:foo).
+    function isGraphKeyword() {
+      if (!/^GRAPH$/i.test(text.slice(i, i + 5))) return false;
+      const next = text[i + 5];
+      return next === undefined || /\s/.test(next) || next === '<' || (next === '_' && text[i + 6] === ':');
+    }
+
+    // Leest het onderwerp van een triple of de naam van een graph. `graphLabel`
+    // geeft aan of het resultaat ook als graphnaam mag dienen (IRI of bnode).
+    function parseSubject() {
+      if (text[i] === '<') return { term: { type: 'uri', value: readIRIREF() }, graphLabel: true };
+      if (text[i] === '_' && text[i + 1] === ':') return { term: { type: 'bnode', value: readBlankNodeLabel() }, graphLabel: true };
+      if (text[i] === '[') return { term: parseBlankNodePropertyList(), graphLabel: false };
+      if (text[i] === '(') return { term: parseCollection(), graphLabel: false };
+      const pn = readPrefixedName();
+      if (pn === null) error('onverwacht teken "' + text[i] + '" bij subject');
+      return { term: { type: 'uri', value: pn }, graphLabel: true };
+    }
+
+    // Eén triple-regel binnen een graph-block (of de standaardgraph).
+    function parseTriplesStatement() {
+      const { term } = parseSubject();
+      skipWS();
+      if (text[i] === '.') { i++; return; }
+      parsePredicateObjectList(term);
+      skipWS();
+      if (text[i] === '.') i++;
+    }
+
+    // De inhoud van `{ … }`: alle triples erin horen bij graph `g` (of de
+    // standaardgraph als `g` null is).
+    function parseGraphBody(g) {
+      if (text[i] !== '{') error('verwacht "{"');
+      i++;
+      const previous = graph;
+      graph = g;
+      for (;;) {
+        skipWS();
+        if (i >= n) error('onafgesloten graph');
+        if (text[i] === '}') { i++; break; }
+        parseTriplesStatement();
+      }
+      graph = previous;
     }
 
     function parseStatement() {
@@ -342,18 +398,27 @@
         if (text[i] === '.') i++;
         return true;
       }
-      // subject
-      let subj;
-      if (text[i] === '<') subj = { type: 'uri', value: readIRIREF() };
-      else if (text[i] === '_' && text[i + 1] === ':') subj = { type: 'bnode', value: readBlankNodeLabel() };
-      else if (text[i] === '[') subj = parseBlankNodePropertyList();
-      else if (text[i] === '(') { subj = parseCollection(); }
-      else {
-        const pn = readPrefixedName();
-        if (pn === null) error('onverwacht teken "' + text[i] + '" bij subject');
-        subj = { type: 'uri', value: pn };
+      // TriG: GRAPH <naam> { … }
+      if (isGraphKeyword()) {
+        i += 5;
+        skipWS();
+        const label = parseSubject();
+        skipWS();
+        parseGraphBody(label.term);
+        return true;
       }
+      // TriG: een blok zonder naam is de standaardgraph.
+      if (text[i] === '{') {
+        parseGraphBody(null);
+        return true;
+      }
+      // subject (of graphnaam gevolgd door een blok)
+      const { term: subj, graphLabel } = parseSubject();
       skipWS();
+      if (graphLabel && text[i] === '{') {
+        parseGraphBody(subj);
+        return true;
+      }
       if (text[i] === '.') { i++; return true; } // bare blank node statement (zeldzaam)
       parsePredicateObjectList(subj);
       skipWS();

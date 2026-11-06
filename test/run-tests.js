@@ -184,6 +184,50 @@ function componentsFor(report, nodeValue) {
   eq('serializeSubject: lijstknopen en items gerapporteerd', r2.consumed.length, 4);
 })();
 
+/* ---------------- 1d-2. TriG: named graphs parsen en schrijven ---------------- */
+
+(function testTrig(){
+  const src = `@prefix ex: <http://ex/> .
+ex:a ex:p "standaard" .
+ex:g1 { ex:a ex:p "een" . ex:b ex:q "twee" . }
+GRAPH ex:g2 { ex:a ex:p "drie" . }
+_:g3 { ex:c ex:r "vier" . }
+`;
+  const parsed = T.parse(src);
+  eq('trig: aantal triples', parsed.triples.length, 5);
+  eq('trig: standaardgraph heeft geen g', parsed.triples[0].g, undefined);
+  eq('trig: graph van tweede triple', parsed.triples[1].g && parsed.triples[1].g.value, 'http://ex/g1');
+  eq('trig: GRAPH-keyword', parsed.triples[3].g && parsed.triples[3].g.value, 'http://ex/g2');
+  eq('trig: blanco graph-label', parsed.triples[4].g && parsed.triples[4].g.value, '_:g3');
+
+  // Collecties binnen een graph nemen die graph over.
+  const coll = T.parse('@prefix ex: <http://ex/> .\nex:g { ex:a ex:b ( "x" "y" ) . }\n');
+  check('trig: collectie-triples erven de graph', coll.triples.every(t => t.g && t.g.value === 'http://ex/g'), JSON.stringify(coll.triples.map(t => t.g)));
+
+  const m = M.buildModel(parsed, { useFilePrefixes: true });
+  const out = SER.serializeTrig(m);
+  check('trig: named graph-blok', out.includes('ex:g1 {'), out);
+  check('trig: standaardgraph staat buiten een blok', /\nex:a\n {4}ex:p "standaard"/.test(out), out);
+  const back = T.parse(out);
+  eq('trig: round-trip aantal triples', back.triples.length, 5);
+  eq('trig: round-trip graph behouden', back.triples.filter(t => t.g && t.g.value === 'http://ex/g1').length, 2);
+
+  // Turtle zonder graphs blijft ongewijzigd werken (TriG is een superset).
+  const plain = T.parse('@prefix ex: <http://ex/> .\nex:a ex:b ex:c .\n');
+  eq('trig: turtle zonder graphs blijft werken', plain.triples.length, 1);
+  eq('trig: turtle-triple zonder g', plain.triples[0].g, undefined);
+
+  // Een blok zonder naam is de standaardgraph.
+  const wrapped = T.parse('@prefix ex: <http://ex/> .\n{ ex:a ex:b ex:c . }\n');
+  eq('trig: default-graph blok', wrapped.triples.length, 1);
+  check('trig: default-graph blok heeft geen g', wrapped.triples[0].g === undefined);
+
+  // serializeTrig zonder graphs levert gewone Turtle op.
+  const flat = M.buildModel(T.parse('@prefix ex: <http://ex/> .\nex:a ex:b ex:c .\n'), { useFilePrefixes: true });
+  check('trig: serializeTrig zonder graphs = turtle',
+    SER.serializeTrig(flat) === SER.serialize(flat), SER.serializeTrig(flat));
+})();
+
 /* ---------------- 1e. Ronde-trip van de meegeleverde shape-bestanden ---------------- */
 
 (function testShapeRoundTrip(){

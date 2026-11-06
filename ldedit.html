@@ -646,7 +646,7 @@
   <h1>LD<span>Edit</span></h1>
   <div class="file-controls">
     <label class="btn primary" id="pickBtn" for="fileInput">Bestand openen…</label>
-    <input type="file" id="fileInput" accept=".ttl,.turtle,.txt">
+    <input type="file" id="fileInput" accept=".ttl,.turtle,.trig,.txt">
     <button class="btn" id="newFileBtn">+ Nieuw model</button>
     <button class="btn" id="downloadBtn" style="display:none;">Download gewijzigd bestand</button>
     <button class="btn" id="prefixBtn" style="display:none;">Prefixen</button>
@@ -665,7 +665,7 @@
           <path d="M8.1 6.9 L15.9 6.9 M7.4 8 L11 16.4 M16.6 8 L13 16.4"/>
         </svg>
       </div>
-      <p><strong>Sleep een .ttl-bestand hierheen</strong><br>of klik op "Bestand openen" om een Turtle/RDF-bestand te laden en de resources te bekijken en te valideren tegen SHACL-shapes.</p>
+      <p><strong>Sleep een .ttl- of .trig-bestand hierheen</strong><br>of klik op "Bestand openen" om een Turtle/TriG/RDF-bestand te laden en de resources te bekijken en te valideren tegen SHACL-shapes.</p>
       <p class="empty-state-or">— of —</p>
       <button type="button" class="btn primary" id="emptyStateNewModelBtn">+ Nieuw model beginnen</button>
     </div>
@@ -728,8 +728,8 @@
 
 <div class="modal-overlay" id="ttlPreviewOverlay" style="display:none;">
   <div class="modal ttl-modal">
-    <h3 class="modal-title">TTL-preview — hele document</h3>
-    <p class="edit-hint" style="margin:0 0 10px;">Dit is de TTL zoals die bij het opslaan wordt geschreven. Alleen ter controle.</p>
+    <h3 class="modal-title">TTL/TriG-preview — hele document</h3>
+    <p class="edit-hint" style="margin:0 0 10px;">Dit is de TTL of TriG zoals die bij het opslaan wordt geschreven. Alleen ter controle.</p>
     <textarea class="ttl-text" id="ttlPreviewText" readonly spellcheck="false"></textarea>
     <div class="modal-actions">
       <button type="button" class="rel-picker-cancel" id="ttlPreviewClose">Sluiten</button>
@@ -797,6 +797,9 @@ let searchQuery = '';
 let classFilter = '';
 let kindFilter = 'individuals';
 let hasUnsavedChanges = false;
+// Formaat van het geopende document: 'turtle' of 'trig'. Bepaalt of bij
+// opslaan de platte Turtle- of de TriG-weergave (met named graphs) wordt gebruikt.
+let documentFormat = 'turtle';
 // Blanco nodes die je in deze sessie aanmaakt: die hebben nog geen eigen
 // uitspraken en zouden dus buiten de lijst vallen. Onthoud ze, zodat ze in de
 // lijst staan om aan te vullen.
@@ -1258,6 +1261,7 @@ async function loadFile(file){
   fileNameEl.textContent = file.name;
   statusEl.textContent = 'Laden…';
   statusEl.className = '';
+  documentFormat = /\.trig$/i.test(file.name || '') ? 'trig' : 'turtle';
   const text = await file.text();
   try{
     model = buildModel(parseTurtle(stripBOM(text)), { useFilePrefixes: true, keepCoreNamespaces });
@@ -1376,6 +1380,7 @@ function renderNewModelForm(){
 }
 
 function createNewModel(prefix, namespace, filename){
+  documentFormat = /\.trig$/i.test(filename) ? 'trig' : 'turtle';
   model = buildModel({ prefixes: { [prefix]: namespace }, triples: [] }, { keepCoreNamespaces });
   sessionBnodes.clear();
   bnodeExpandOverride.clear();
@@ -2401,10 +2406,20 @@ function ensureNode(uri){
   return model.nodes[uri];
 }
 
+// In welke graph een resource thuishoort (TriG): de graph van zijn bestaande
+// triples, of de standaardgraph als die er niet is.
+function graphTermForSubject(subjectUri){
+  const existing = model.triples.find(t => t.s.value === subjectUri && t.g);
+  return existing ? existing.g : null;
+}
+
 function addTripleValueRaw(subjectUri, predicateUri, objTerm){
   const isBnodeSubject = subjectUri.indexOf('_:') === 0;
   const subjTerm = isBnodeSubject ? { type:'bnode', value:subjectUri } : { type:'uri', value:subjectUri };
-  model.triples.push({ s:subjTerm, p:{ type:'uri', value:predicateUri }, o:objTerm });
+  const triple = { s:subjTerm, p:{ type:'uri', value:predicateUri }, o:objTerm };
+  const graphTerm = graphTermForSubject(subjectUri);
+  if(graphTerm) triple.g = graphTerm;
+  model.triples.push(triple);
   let subjNode = ensureNode(subjectUri);
   if(subjNode.isBnode !== isBnodeSubject){ subjNode.isBnode = isBnodeSubject; }
   subjNode.out.push({ p:predicateUri, o:objTerm });
@@ -3460,6 +3475,8 @@ function suggestCurieFromLabel(label){
 
 function uriToTurtle(uri){ return window.LDEdit.serialize.uriToTurtle(model, uri); }
 function serializeTurtle(){ return window.LDEdit.serialize.serialize(model); }
+function serializeTrig(){ return window.LDEdit.serialize.serializeTrig(model); }
+function serializeDocument(){ return documentFormat === 'trig' ? serializeTrig() : serializeTurtle(); }
 
 /* ================= Turtle bekijken/bewerken ================= */
 
@@ -3501,6 +3518,11 @@ function saveResourceTtl(){
     return;
   }
 
+  // Houd de graph van dit subject aan (TriG): de nieuwe triples horen op
+  // dezelfde plek als de oude.
+  const subjectGraph = graphTermForSubject(uri);
+  if(subjectGraph) parsed.triples.forEach(t => { if(!t.g) t.g = subjectGraph; });
+
   // De oude triples van dit subject (en de inline blanco nodes eruit) vervangen.
   const removeIds = new Set([uri].concat(ttlEditConsumed));
   const kept = model.triples.filter(t => !removeIds.has(t.s.value));
@@ -3519,7 +3541,7 @@ function saveResourceTtl(){
 
 function openTtlPreview(){
   if(!model) return;
-  document.getElementById('ttlPreviewText').value = serializeTurtle();
+  document.getElementById('ttlPreviewText').value = serializeDocument();
   document.getElementById('ttlPreviewOverlay').style.display = 'flex';
 }
 
@@ -3626,7 +3648,7 @@ function exportReport(){
   const table = report.buildTable(model, itemsFor(kind, klass), selectedReportColumns(), { includeResource: reportIncludeUri() });
   const fmt = reportFormat(document.getElementById('reportFormat').value);
   const text = fmt.fn(table);
-  const base = (fileNameEl.textContent || 'rapportage').replace(/\.(ttl|turtle|txt|shacl)$/i, '') || 'rapportage';
+  const base = (fileNameEl.textContent || 'rapportage').replace(/\.(ttl|turtle|trig|txt|shacl)$/i, '') || 'rapportage';
   const suggested = base + '-rapportage.' + fmt.ext;
 
   if(desktop()){
@@ -3791,7 +3813,7 @@ function saveDiagram(){
   const text = document.getElementById('diagramPreview').value;
   if(!text) return;
   const fmt = diagramFormatInfo(document.getElementById('diagramFormat').value);
-  const base = (fileNameEl.textContent || 'diagram').replace(/\.(ttl|turtle|txt|shacl)$/i, '') || 'diagram';
+  const base = (fileNameEl.textContent || 'diagram').replace(/\.(ttl|turtle|trig|txt|shacl)$/i, '') || 'diagram';
   const suggested = base + '-diagram.' + fmt.ext;
 
   if(desktop()){
@@ -3815,24 +3837,29 @@ function downloadTurtle(){ saveTurtle(false); }
 
 function saveTurtle(forceDialog){
   if(!model) return;
-  const text = serializeTurtle();
+  // Beide weergaven meegeven: het hoofdproces kiest op basis van de gekozen
+  // bestandsextensie (.trig → TriG, anders Turtle).
+  const turtleText = serializeTurtle();
+  const trigText = serializeTrig();
   if(desktop()){
     const name = fileNameEl.textContent || 'bestand.ttl';
-    return desktop().save(text, name, forceDialog).then(result => {
+    return desktop().save(turtleText, name, forceDialog, trigText).then(result => {
       if(!result || !result.saved) return result || { saved:false };
       fileNameEl.textContent = result.name;
+      documentFormat = /\.trig$/i.test(result.name) ? 'trig' : 'turtle';
       hasUnsavedChanges = false;
       updateDownloadState();
       updateStatus();
       return result;
     });
   }
-  const blob = new Blob([text], { type:'text/turtle' });
+  const isTrig = documentFormat === 'trig';
+  const blob = new Blob([isTrig ? trigText : turtleText], { type: isTrig ? 'application/trig' : 'text/turtle' });
   const url = URL.createObjectURL(blob);
-  const base = (fileNameEl.textContent || 'bestand.ttl').replace(/\.(ttl|turtle|txt)$/i, '');
+  const base = (fileNameEl.textContent || 'bestand.ttl').replace(/\.(ttl|turtle|trig|txt)$/i, '');
   const a = document.createElement('a');
   a.href = url;
-  a.download = base + '-gewijzigd.ttl';
+  a.download = base + '-gewijzigd.' + (isTrig ? 'trig' : 'ttl');
   document.body.appendChild(a);
   a.click();
   a.remove();

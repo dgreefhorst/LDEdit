@@ -9,8 +9,8 @@ let saveAsHandler = null;
 
 contextBridge.exposeInMainWorld('ttlDesktop', {
   hasStartupFile: () => Boolean(startupFile),
-  save: (text, suggestedName, forceDialog) =>
-    ipcRenderer.invoke('ttl:save', { text, suggestedName, forceDialog }),
+  save: (text, suggestedName, forceDialog, trigText) =>
+    ipcRenderer.invoke('ttl:save', { text, suggestedName, forceDialog, trigText }),
   saveReport: (text, suggestedName, filterName, extensions, title) =>
     ipcRenderer.invoke('report:save', { text, suggestedName, filterName, extensions, title }),
   getRecentFiles: () => ipcRenderer.invoke('ttl:recent'),

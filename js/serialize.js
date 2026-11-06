@@ -12,7 +12,10 @@
 
    `serializeSubject` levert het blok van één subject plus de id's van de blanco
    nodes die daarin inline zijn geschreven, zodat de app die bij het bewerken
-   weet te vervangen. */
+   weet te vervangen.
+
+   `serializeTrig` schrijft hetzelfde model als TriG: triples met een `g`-term
+   komen in het blok van die named graph, de rest in de standaardgraph. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -114,9 +117,12 @@
   }
 
   // Bouwt alle afgeleide informatie en de renderfuncties voor een model.
-  function prepare(model){
-    const index = buildIndex(model.triples);
-    const { count, parent } = referenceInfo(model.triples);
+  // `triples` beperkt de beschouwing tot een deelverzameling (gebruikt voor de
+  // inhoud van één named graph in TriG).
+  function prepare(model, triples){
+    triples = triples || model.triples;
+    const index = buildIndex(triples);
+    const { count, parent } = referenceInfo(triples);
 
     const isListNode = id => {
       const e = index.byKey.get('bnode:' + id);
@@ -291,21 +297,53 @@
       return subjStr + '\n' + predicateStatements(e, 1).join(' ;\n') + ' .\n\n';
     }
 
-    function prefixBlock(){
-      let out = '';
-      Object.keys(model.prefixes).sort().forEach(p => { out += '@prefix ' + p + ': <' + model.prefixes[p] + '> .\n'; });
-      return out + '\n';
-    }
-
-    return { index, consumed, lists, inlined, blockText, prefixBlock };
+    return { index, consumed, lists, inlined, blockText };
   }
 
-  function serialize(model){
-    const b = prepare(model);
-    let out = b.prefixBlock();
+  function prefixBlock(model){
+    let out = '';
+    Object.keys(model.prefixes).sort().forEach(p => { out += '@prefix ' + p + ': <' + model.prefixes[p] + '> .\n'; });
+    return out + '\n';
+  }
+
+  // De subject-blokken van een (deel)verzameling triples, zonder prefixregels.
+  function blocksText(model, triples){
+    const b = prepare(model, triples);
+    let out = '';
     b.index.order.forEach(key => {
       if(key.startsWith('bnode:') && b.consumed.has(key.slice('bnode:'.length))) return;
       out += b.blockText(key);
+    });
+    return out;
+  }
+
+  function serialize(model){
+    return prefixBlock(model) + blocksText(model, model.triples);
+  }
+
+  function indentText(text, level){
+    const pad = '    '.repeat(level);
+    return text.split('\n').map(line => line ? pad + line : line).join('\n');
+  }
+
+  // TriG: groepeer de triples per graph. Triples zonder `g` horen bij de
+  // standaardgraph en staan bovenaan; elke named graph krijgt een eigen blok.
+  function serializeTrig(model){
+    const order = [];
+    const groups = new Map();
+    model.triples.forEach(t => {
+      const key = t.g ? t.g.type + ':' + t.g.value : '';
+      let group = groups.get(key);
+      if(!group){ group = { term: t.g || null, triples: [] }; groups.set(key, group); order.push(key); }
+      group.triples.push(t);
+    });
+    let out = prefixBlock(model);
+    order.forEach(key => {
+      const group = groups.get(key);
+      if(!group.term){ out += blocksText(model, group.triples); return; }
+      const name = termToTurtle(model, group.term, false);
+      const body = blocksText(model, group.triples).replace(/\n+$/, '\n');
+      out += name + ' {\n' + indentText(body, 1) + '}\n\n';
     });
     return out;
   }
@@ -329,5 +367,5 @@
     return { text: b.blockText(subjectKey), consumed: [...consumed] };
   }
 
-  return { serialize, serializeSubject, uriToTurtle, termToTurtle, literalToTurtle };
+  return { serialize, serializeTrig, serializeSubject, uriToTurtle, termToTurtle, literalToTurtle };
 });

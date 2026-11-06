@@ -4,10 +4,11 @@ const fs = require('node:fs/promises');
 
 const APP_NAME = 'LDEdit';
 const COPYRIGHT = 'Copyright © 2026 Danny Greefhorst';
-const TTL_FILE = /\.(ttl|turtle|txt)$/i;
+const TTL_FILE = /\.(ttl|turtle|trig|txt)$/i;
 const SHAPE_FILE = /\.(ttl|turtle|shacl)$/i;
 const TTL_FILTERS = [
   { name: 'Turtle / RDF', extensions: ['ttl', 'turtle', 'txt'] },
+  { name: 'TriG', extensions: ['trig'] },
   { name: 'Alle bestanden', extensions: ['*'] }
 ];
 const MAX_RECENT = 10;
@@ -221,19 +222,22 @@ function setCurrentFile(filePath) {
   setDirty(false);
 }
 
-async function writeDocument({ text, suggestedName, forceDialog }) {
+async function writeDocument({ text, trigText, suggestedName, forceDialog }) {
   let target = currentFilePath;
   if (forceDialog || !target) {
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-      title: forceDialog ? 'Opslaan als' : 'Turtle-bestand opslaan',
+      title: forceDialog ? 'Opslaan als' : 'Turtle- of TriG-bestand opslaan',
       defaultPath: target || path.join(app.getPath('documents'), suggestedName || 'bestand.ttl'),
       filters: TTL_FILTERS
     });
     if (canceled || !filePath) return { saved: false, canceled: true };
     target = filePath;
   }
+  // Een .trig-bestand krijgt de TriG-weergave (met named graphs); al het andere
+  // de platte Turtle-weergave.
+  const content = /\.trig$/i.test(target) && typeof trigText === 'string' ? trigText : text;
   try {
-    await fs.writeFile(target, text, 'utf8');
+    await fs.writeFile(target, content, 'utf8');
   } catch (err) {
     dialog.showErrorBox('Opslaan mislukt', `${target}\n\n${err.message}`);
     return { saved: false, error: err.message };
@@ -389,7 +393,7 @@ async function openFileInWindow(filePath) {
 
 async function pickAndOpen() {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    title: 'Turtle-bestand openen',
+    title: 'Turtle- of TriG-bestand openen',
     properties: ['openFile'],
     filters: TTL_FILTERS
   });
@@ -450,7 +454,7 @@ async function buildMenu() {
         { label: 'Opslaan', accelerator: 'CmdOrCtrl+S', click: () => send('app:save') },
         { label: 'Opslaan als…', accelerator: 'Shift+CmdOrCtrl+S', click: () => send('app:save-as') },
         { type: 'separator' },
-        { label: 'TTL-preview…', accelerator: 'Shift+CmdOrCtrl+P', click: () => send('app:ttl-preview') },
+        { label: 'TTL/TriG-preview…', accelerator: 'Shift+CmdOrCtrl+P', click: () => send('app:ttl-preview') },
         { label: 'Rapportage…', accelerator: 'CmdOrCtrl+E', click: () => send('app:report') },
         { label: 'Diagram…', accelerator: 'Shift+CmdOrCtrl+D', click: () => send('app:diagram') },
         { type: 'separator' },
